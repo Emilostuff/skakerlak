@@ -39,3 +39,20 @@ IN: "go"
 Go received before position, ignoring
 IN: "stop"
 Received stop
+Engine started
+IN: "uci"
+OUT: uciok sent
+Engine started
+IN: "uci"
+OUT: uciok sent
+IN: "go"
+Go received before position, ignoring
+IN: "stop"
+Received stop
+IN: "position"
+Got position: "position"
+IN: "go"
+OUT: bestmove e2e4 sent
+Engine started
+IN: "go"
+OUT: bestmove e2e4 sent

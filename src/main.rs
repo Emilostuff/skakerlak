@@ -1,11 +1,9 @@
 use std::fs::OpenOptions;
-use std::io::{self, BufRead, Write};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-use std::thread;
+use std::io::Write;
 use std::time::Duration;
+use tokio::io::{stdin, stdout, AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::sync::{mpsc, watch};
+use tokio::task::JoinHandle;
 
 fn log_line(line: &str) {
     let mut file = OpenOptions::new()
@@ -16,128 +14,105 @@ fn log_line(line: &str) {
     writeln!(file, "{}", line).unwrap();
 }
 
-fn main() {
-    let stdin = io::stdin();
-    let stdout = Arc::new(Mutex::new(io::stdout()));
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let mut position_seen = false;
+#[tokio::main]
+async fn main() {
+    let mut reader = BufReader::new(stdin()).lines();
+
+    // Channel for search task to send info/bestmove to main task
+    let (search_tx, mut search_rx) = mpsc::unbounded_channel::<String>();
+    // Watch channel to signal stop to the search task
+    let (stop_tx, stop_rx) = watch::channel(false);
 
     log_line("Engine started");
 
-    for line in stdin.lock().lines() {
-        let line = line.unwrap();
-        // Trim and normalize command
+    // Task to forward search info/bestmove to stdout
+    tokio::spawn(async move {
+        let mut out = stdout();
+        while let Some(msg) = search_rx.recv().await {
+            out.write_all(msg.as_bytes()).await.unwrap();
+            out.flush().await.unwrap();
+        }
+    });
+
+    let mut search_handle: Option<JoinHandle<()>> = None;
+
+    while let Some(line) = reader.next_line().await.unwrap_or(None) {
         let cmd = line.replace("\r", "").trim().to_lowercase();
         log_line(&format!("IN: {:?}", line));
 
         match cmd.as_str() {
             "uci" => {
-                let mut out = stdout.lock().unwrap();
-                writeln!(out, "id name MyRustBot").unwrap();
-                writeln!(out, "id author Emil Skydsgaard").unwrap();
-                writeln!(out, "id version {}", env!("CARGO_PKG_VERSION")).unwrap();
-                writeln!(out, "uciok").unwrap();
-                out.flush().unwrap();
+                let mut out = stdout();
+                out.write_all(b"id name MyRustBot\n").await.unwrap();
+                out.write_all(b"id author Emil Skydsgaard\n").await.unwrap();
+                out.write_all(format!("id version {}\n", env!("CARGO_PKG_VERSION")).as_bytes())
+                    .await
+                    .unwrap();
+                out.write_all(b"uciok\n").await.unwrap();
+                out.flush().await.unwrap();
                 log_line("OUT: uciok sent");
             }
-
             "isready" => {
-                let mut out = stdout.lock().unwrap();
-                writeln!(out, "readyok").unwrap();
-                out.flush().unwrap();
+                let mut out = stdout();
+                out.write_all(b"readyok\n").await.unwrap();
+                out.flush().await.unwrap();
                 log_line("OUT: readyok sent");
             }
-
             "ucinewgame" => {
-                position_seen = false;
-                stop_flag.store(true, Ordering::SeqCst);
+                let _ = stop_tx.send(true);
                 log_line("New game started");
             }
-
             cmd if cmd.starts_with("position") => {
-                position_seen = true;
                 log_line(&format!("Got position: {:?}", line));
             }
-
             cmd if cmd.starts_with("go") => {
-                if !position_seen {
-                    log_line("Go received before position, ignoring");
-                    continue;
-                }
+                // Stop any previous search
+                let _ = stop_tx.send(true);
 
-                let stop_clone = stop_flag.clone();
-                stop_flag.store(false, Ordering::SeqCst);
-                let stdout_clone = stdout.clone();
+                // Prepare for new search
+                let search_tx = search_tx.clone();
+                let stop_rx = stop_rx.clone();
                 let is_infinite = cmd.contains("infinite");
 
-                if is_infinite {
-                    // Infinite thinking thread
-                    thread::spawn(move || {
-                        let mut depth = 1;
-                        while !stop_clone.load(Ordering::SeqCst) {
-                            {
-                                let mut out = stdout_clone.lock().unwrap();
-                                writeln!(
-                                    out,
-                                    "info depth {} score cp {} pv e2e4",
-                                    depth,
-                                    10 * depth
-                                )
-                                .unwrap();
-                                out.flush().unwrap();
-                            }
-                            thread::sleep(Duration::from_millis(500));
-                            depth += 1;
-                        }
-                        {
-                            let mut out = stdout_clone.lock().unwrap();
-                            writeln!(out, "bestmove e2e4").unwrap();
-                            out.flush().unwrap();
-                        }
-                        log_line("OUT: bestmove e2e4 sent");
-                    });
-                } else {
-                    // Normal go: simulate thinking for a few steps
-                    thread::spawn(move || {
-                        let mut depth = 1;
-                        while depth <= 10 {
-                            {
-                                let mut out = stdout_clone.lock().unwrap();
-                                writeln!(
-                                    out,
-                                    "info depth {} score cp {} pv e2e4",
-                                    depth,
-                                    10 * depth
-                                )
-                                .unwrap();
-                                out.flush().unwrap();
-                            }
-                            thread::sleep(Duration::from_millis(500));
-                            depth += 1;
-                        }
-                        {
-                            let mut out = stdout_clone.lock().unwrap();
-                            writeln!(out, "bestmove e2e4").unwrap();
-                            out.flush().unwrap();
-                        }
-                        log_line("OUT: bestmove e2e4 sent");
-                    });
-                }
-            }
+                // Reset stop flag
+                let _ = stop_tx.send(false);
 
+                // Spawn search task
+                search_handle = Some(tokio::spawn(async move {
+                    let mut depth = 1;
+                    loop {
+                        if *stop_rx.borrow() {
+                            break;
+                        }
+                        let info =
+                            format!("info depth {} score cp {} pv e2e4\n", depth, 10 * depth);
+                        let _ = search_tx.send(info);
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        depth += 1;
+                        if !is_infinite && depth > 10 {
+                            break;
+                        }
+                    }
+                    let _ = search_tx.send("bestmove e2e4\n".to_string());
+                    log_line("OUT: bestmove e2e4 sent");
+                }));
+            }
             "stop" => {
-                stop_flag.store(true, Ordering::SeqCst);
+                let _ = stop_tx.send(true);
                 log_line("Received stop");
             }
-
             "quit" => {
-                stop_flag.store(true, Ordering::SeqCst);
+                let _ = stop_tx.send(true);
                 log_line("Received quit");
                 break;
             }
-
             _ => log_line(&format!("Unknown command: {:?}", line)),
         }
+    }
+
+    // Wait for search task to finish if running
+    if let Some(handle) = search_handle {
+        let _ = handle.await;
     }
 
     log_line("Engine exited");
