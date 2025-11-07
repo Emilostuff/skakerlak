@@ -1,3 +1,7 @@
+use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
+use shakmaty;
+use shakmaty_uci::{UciMessage, UciTimeControl};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::time::Duration;
@@ -37,15 +41,18 @@ async fn main() {
 
     let mut search_handle: Option<JoinHandle<()>> = None;
 
-    while let Some(line) = reader.next_line().await.unwrap_or(None) {
-        let cmd = line.replace("\r", "").trim().to_lowercase();
-        log_line(&format!("IN: {:?}", line));
+    // Position
+    let mut pos = Chess::default();
 
-        match cmd.as_str() {
-            "uci" => {
+    while let Some(line) = reader.next_line().await.unwrap_or(None) {
+        let cmd = line.trim();
+        log_line(&format!("IN: {:?}", cmd));
+
+        match cmd.parse() {
+            Ok(UciMessage::Uci) => {
                 let mut out = stdout();
                 out.write_all(
-                    format!("id name MyRustBot {}\n", env!("CARGO_PKG_VERSION")).as_bytes(),
+                    format!("id name Skakarlak {}\n", env!("CARGO_PKG_VERSION")).as_bytes(),
                 )
                 .await
                 .unwrap();
@@ -54,61 +61,90 @@ async fn main() {
                 out.flush().await.unwrap();
                 log_line("OUT: uciok sent");
             }
-            "isready" => {
+            Ok(UciMessage::IsReady) => {
                 let mut out = stdout();
                 out.write_all(b"readyok\n").await.unwrap();
                 out.flush().await.unwrap();
                 log_line("OUT: readyok sent");
             }
-            "ucinewgame" => {
+            Ok(UciMessage::UciNewGame) => {
                 let _ = stop_tx.send(true);
                 log_line("New game started");
             }
-            cmd if cmd.starts_with("position") => {
-                log_line(&format!("Got position: {:?}", line));
+            Ok(UciMessage::Position {
+                startpos,
+                fen,
+                moves,
+            }) => {
+                pos = if startpos {
+                    Chess::default()
+                } else {
+                    make_position(startpos, fen, moves).unwrap()
+                };
             }
-            cmd if cmd.starts_with("go") => {
+            Ok(UciMessage::Go {
+                time_control,
+                search_control: _,
+            }) => {
                 // Stop any previous search
                 let _ = stop_tx.send(true);
 
                 // Prepare for new search
                 let search_tx = search_tx.clone();
                 let stop_rx = stop_rx.clone();
-                let is_infinite = cmd.contains("infinite");
+                let is_infinite = matches!(time_control, Some(UciTimeControl::Infinite));
 
                 // Reset stop flag
                 let _ = stop_tx.send(false);
 
+                let pos = pos.clone();
+
                 // Spawn search task
                 search_handle = Some(tokio::spawn(async move {
+                    let moves = pos.legal_moves();
+                    let mut seed = [0u8; 32];
+                    rand::rng().fill_bytes(&mut seed);
+                    let mut rng = ChaCha20Rng::from_seed(seed);
+                    let best_move = moves
+                        .as_slice()
+                        .choose(&mut rng)
+                        .map(|m| m.to_uci(CastlingMode::Standard))
+                        .unwrap();
                     let mut depth = 1;
                     loop {
                         if *stop_rx.borrow() {
                             break;
                         }
-                        let info =
-                            format!("info depth {} score cp {} pv e2e4\n", depth, 10 * depth);
+                        let info = format!(
+                            "info depth {} score cp {} pv {}\n",
+                            depth,
+                            10 * depth,
+                            best_move
+                        );
                         let _ = search_tx.send(info);
                         tokio::time::sleep(Duration::from_millis(500)).await;
                         depth += 1;
-                        if !is_infinite && depth > 10 {
+                        if !is_infinite && depth > 5 {
                             break;
                         }
                     }
-                    let _ = search_tx.send("bestmove e2e4\n".to_string());
-                    log_line("OUT: bestmove e2e4 sent");
+                    let _ = search_tx.send(format!("bestmove {}\n", best_move));
+                    log_line(&format!("OUT: bestmove {} sent", best_move));
                 }));
             }
-            "stop" => {
+            Ok(UciMessage::Stop) => {
                 let _ = stop_tx.send(true);
                 log_line("Received stop");
             }
-            "quit" => {
+            Ok(UciMessage::Quit) => {
                 let _ = stop_tx.send(true);
                 log_line("Received quit");
                 break;
             }
-            _ => log_line(&format!("Unknown command: {:?}", line)),
+            Ok(cmd) => {
+                log_line(&format!("Received: {:?}, but did not handle it.", cmd));
+            }
+            Err(e) => log_line(&format!("Error parsing UCI command: {}", e)),
         }
     }
 
@@ -118,4 +154,42 @@ async fn main() {
     }
 
     log_line("Engine exited");
+}
+
+use shakmaty::{fen::Fen, uci::UciMove, CastlingMode, Chess, Position};
+
+/// Construct a `shakmaty::Chess` position from either `startpos` or a given FEN,
+/// applying a sequence of UCI moves on top.
+///
+/// # Arguments
+///
+/// * `startpos` — whether to start from the standard initial position.
+/// * `fen` — optional FEN; ignored if `startpos` is `true`.
+/// * `moves` — list of UCI moves to apply.
+///
+/// # Returns
+///
+/// The resulting `shakmaty::Chess` position after applying all moves.
+pub fn make_position(
+    startpos: bool,
+    fen: Option<Fen>,
+    moves: Vec<UciMove>,
+) -> Result<Chess, Box<dyn std::error::Error>> {
+    // 1. Choose starting position
+    let mut pos = if startpos {
+        Chess::default()
+    } else if let Some(fen) = fen {
+        fen.into_position(CastlingMode::Standard)?
+    } else {
+        // Fallback: no startpos and no FEN means default start
+        Chess::default()
+    };
+
+    // 2. Apply all moves sequentially
+    for mv in moves {
+        let m = mv.to_move(&pos)?;
+        pos = pos.play(&m)?;
+    }
+
+    Ok(pos)
 }
