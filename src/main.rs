@@ -23,6 +23,7 @@ async fn main() {
     // Watch channel to signal stop to the search task
     let (stop_tx, stop_rx) = watch::channel(false);
 
+    log_line("");
     log_line("Engine started");
 
     // Task to forward search info/bestmove to stdout
@@ -43,11 +44,12 @@ async fn main() {
         match cmd.as_str() {
             "uci" => {
                 let mut out = stdout();
-                out.write_all(b"id name MyRustBot\n").await.unwrap();
+                out.write_all(
+                    format!("id name MyRustBot {}\n", env!("CARGO_PKG_VERSION")).as_bytes(),
+                )
+                .await
+                .unwrap();
                 out.write_all(b"id author Emil Skydsgaard\n").await.unwrap();
-                out.write_all(format!("id version {}\n", env!("CARGO_PKG_VERSION")).as_bytes())
-                    .await
-                    .unwrap();
                 out.write_all(b"uciok\n").await.unwrap();
                 out.flush().await.unwrap();
                 log_line("OUT: uciok sent");

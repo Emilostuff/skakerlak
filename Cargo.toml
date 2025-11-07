@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+shakmaty = "0.29.4"
+shakmaty-uci = "0.1.1"
 tokio = { version = "1.37.0", features = ["full", "io-util", "macros", "sync", "time"] }
