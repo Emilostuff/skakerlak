@@ -1,10 +1,8 @@
-use rand::prelude::*;
-use rand_chacha::ChaCha20Rng;
 use shakmaty::{fen::Fen, uci::UciMove, CastlingMode, Chess, Position};
 use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciTimeControl};
-use skakarlak::UciInterface;
+use skakarlak::search::find_best_move;
+use skakarlak::uci::UciInterface;
 use std::error::Error;
-use std::time::Duration;
 use tokio::sync::{
     mpsc::{self, UnboundedSender},
     watch,
@@ -48,6 +46,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+pub struct UciHandler {}
 
 /// Processes a single UCI command, modifying state and sending responses.
 /// Returns `true` if the engine should quit.
@@ -110,61 +110,39 @@ async fn handle_command(
             let search_pos = pos.clone();
 
             *search_handle = Some(tokio::spawn(async move {
-                // Dummy search logic.
+                dbg!(&search_pos);
+                let (eval, best_move) = find_best_move(&search_pos);
+                let best_move = best_move.unwrap();
 
-                let moves = search_pos.legal_moves();
-                if moves.is_empty() {
-                    return;
-                }
+                let info_msg = UciMessage::Info(UciInfo {
+                    depth: Some(6),
+                    score: Some(UciInfoScore {
+                        cp: Some(eval * 100),
+                        mate: None,
+                        lower_bound: false,
+                        upper_bound: false,
+                    }),
+                    pv: vec![UciMove::from_move(&best_move, CastlingMode::Standard)],
+                    sel_depth: None,
+                    time: None,
+                    nodes: None,
+                    multi_pv: None,
+                    curr_move: None,
+                    curr_move_num: None,
+                    hash_full: None,
+                    nps: None,
+                    tb_hits: None,
+                    sb_hits: None,
+                    cpu_load: None,
+                    string: None,
+                    refutation: vec![],
+                    curr_line: vec![],
+                });
 
-                let mut seed = [0u8; 32];
-                rand::rng().fill_bytes(&mut seed);
-                let mut rng = ChaCha20Rng::from_seed(seed);
-                let best_move = moves.choose(&mut rng).unwrap();
+                let _ = search_tx.send(info_msg);
 
-                let mut depth = 1;
-                loop {
-                    if *stop_rx.borrow() {
-                        break;
-                    }
-
-                    let info_msg = UciMessage::Info(UciInfo {
-                        depth: Some(depth),
-                        score: Some(UciInfoScore {
-                            cp: Some(10 * depth as i32),
-                            mate: None,
-                            lower_bound: false,
-                            upper_bound: false,
-                        }),
-                        pv: vec![UciMove::from_move(best_move, CastlingMode::Standard)],
-                        sel_depth: None,
-                        time: None,
-                        nodes: None,
-                        multi_pv: None,
-                        curr_move: None,
-                        curr_move_num: None,
-                        hash_full: None,
-                        nps: None,
-                        tb_hits: None,
-                        sb_hits: None,
-                        cpu_load: None,
-                        string: None,
-                        refutation: vec![],
-                        curr_line: vec![],
-                    });
-
-                    if search_tx.send(info_msg).is_err() {
-                        break;
-                    }
-
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    depth += 1;
-                    if !is_infinite && depth > 5 {
-                        break;
-                    }
-                }
                 let _ = search_tx.send(UciMessage::BestMove {
-                    best_move: UciMove::from_move(best_move, CastlingMode::Standard),
+                    best_move: UciMove::from_move(&best_move, CastlingMode::Standard),
                     ponder: None,
                 });
             }));

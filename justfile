@@ -5,5 +5,5 @@ run:
     just build
     cd target/release && ./runner
 
-debug:
+watch:
     @tail -f target/release/engine.log
