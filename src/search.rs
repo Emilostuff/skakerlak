@@ -16,6 +16,8 @@ fn eval(pos: &Chess) -> i32 {
         } else {
             1000
         };
+    } else if pos.has_insufficient_material(pos.turn()) || pos.is_stalemate() {
+        return 0;
     }
 
     // otherwise just count material difference
@@ -37,7 +39,7 @@ fn eval(pos: &Chess) -> i32 {
 }
 
 pub fn minimax(pos: &Chess, depth: u8, mut alpha: i32, mut beta: i32) -> (i32, Option<Move>) {
-    if depth == 0 || pos.is_checkmate() || pos.is_stalemate() {
+    if depth == 0 || pos.is_game_over() {
         return (eval(pos), None);
     }
 
