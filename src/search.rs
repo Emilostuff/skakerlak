@@ -1,6 +1,24 @@
+use once_cell::sync::Lazy;
+use rand::seq::IndexedRandom;
 use shakmaty::{Chess, Color, Move, Position, Role};
 
+use crate::book::Book;
+
 pub fn find_best_move(pos: &Chess) -> (i32, Option<Move>) {
+    static BOOK: Lazy<Book> = Lazy::new(|| {
+        let book_data: &[u8] = include_bytes!("../human.bin");
+        Book::from_bytes(book_data)
+    });
+
+    let moves = BOOK.moves(pos);
+
+    if !moves.is_empty() {
+        // return random move from book
+        let random_move = moves.choose(&mut rand::rng()).unwrap();
+        dbg!(&random_move);
+        return (8800, Some(random_move.to_move(pos).unwrap()));
+    }
+
     minimax(
         pos,
         6, // depth
@@ -12,9 +30,9 @@ pub fn find_best_move(pos: &Chess) -> (i32, Option<Move>) {
 fn eval(pos: &Chess) -> i32 {
     if pos.is_checkmate() {
         return if pos.turn() == Color::White {
-            -1000
+            -42000
         } else {
-            1000
+            42000
         };
     } else if pos.has_insufficient_material(pos.turn()) || pos.is_stalemate() {
         return 0;
@@ -25,11 +43,11 @@ fn eval(pos: &Chess) -> i32 {
 
     for (_, piece) in pos.board().iter() {
         let value = match piece.role {
-            Role::Pawn => 1,
-            Role::Knight => 3,
-            Role::Bishop => 3,
-            Role::Rook => 5,
-            Role::Queen => 9,
+            Role::Pawn => 100,
+            Role::Knight => 320,
+            Role::Bishop => 330,
+            Role::Rook => 500,
+            Role::Queen => 900,
             Role::King => 0,
         };
         material_diff += value * if piece.color == Color::White { 1 } else { -1 };

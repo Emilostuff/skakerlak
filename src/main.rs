@@ -1,4 +1,4 @@
-use shakmaty::{fen::Fen, uci::UciMove, CastlingMode, Chess, Position};
+use shakmaty::{fen::Fen, uci::UciMove, CastlingMode, Chess, Color, Position};
 use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciTimeControl};
 use skakarlak::search::find_best_move;
 use skakarlak::uci::UciInterface;
@@ -110,14 +110,19 @@ async fn handle_command(
             let search_pos = pos.clone();
 
             *search_handle = Some(tokio::spawn(async move {
-                dbg!(&search_pos);
-                let (eval, best_move) = find_best_move(&search_pos);
+                let (mut eval, best_move) = find_best_move(&search_pos);
+
+                // Correct sign on cp score to match UI
+                if search_pos.turn() == Color::Black {
+                    eval = -eval;
+                }
+
                 let best_move = best_move.unwrap();
 
                 let info_msg = UciMessage::Info(UciInfo {
                     depth: Some(6),
                     score: Some(UciInfoScore {
-                        cp: Some(eval * 100),
+                        cp: Some(eval),
                         mate: None,
                         lower_bound: false,
                         upper_bound: false,

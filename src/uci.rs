@@ -44,14 +44,38 @@ impl UciInterface {
     pub async fn send(&mut self, msg: &UciMessage) -> std::io::Result<()> {
         // Format the message and add the required newline for the UCI protocol.
         let msg_string = format!("{}\n", msg);
+        let reordered_msg = Self::reorder_uci_info(&msg_string);
 
         // Log the outgoing message, trimming the newline for a cleaner log.
         self.log(&format!("OUT: '{}'", msg_string.trim()))?;
+        self.log(&format!("OUT actual: '{}'", reordered_msg.trim()))?;
 
-        self.output.write_all(msg_string.as_bytes()).await?;
+        self.output.write_all(reordered_msg.as_bytes()).await?;
         self.output.flush().await?;
 
         Ok(())
+    }
+
+    fn reorder_uci_info(line: &str) -> String {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        if parts.len() != 8 || parts[0] != "info" {
+            return line.to_string();
+        }
+
+        // info depth 6 pv e7e6 score cp -1222
+        // -> info depth 6 score cp -1222 pv e7e6
+        format!(
+            "{} {} {} {} {} {} {} {}\n",
+            parts[0], // info
+            parts[1], // depth
+            parts[2], // 6
+            parts[5], // score
+            parts[6], // cp
+            parts[7], // -1222
+            parts[3], // pv
+            parts[4]  // e7e6
+        )
     }
 
     pub async fn receive(&mut self) -> std::io::Result<Option<UciMessage>> {
