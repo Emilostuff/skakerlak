@@ -1,24 +1,47 @@
-use once_cell::sync::Lazy;
-use rand::seq::IndexedRandom;
+use crate::{Score, SearchCommand, SearchInfo};
+use crossbeam_channel::{Receiver, Sender};
 use shakmaty::{Chess, Color, Move, Position, Role};
 
-use crate::book::Book;
+pub struct Searcher {
+    cmd_rx: Receiver<SearchCommand>,
+    info_tx: Sender<SearchInfo>,
+}
 
-pub fn find_best_move(pos: &Chess) -> (i32, Option<Move>) {
-    static BOOK: Lazy<Book> = Lazy::new(|| {
-        let book_data: &[u8] = include_bytes!("../human.bin");
-        Book::from_bytes(book_data)
-    });
-
-    let moves = BOOK.moves(pos);
-
-    if !moves.is_empty() {
-        // return random move from book
-        let random_move = moves.choose(&mut rand::rng()).unwrap();
-        dbg!(&random_move);
-        return (8800, Some(random_move.to_move(pos).unwrap()));
+impl Searcher {
+    pub fn new(cmd_rx: Receiver<SearchCommand>, info_tx: Sender<SearchInfo>) -> Self {
+        Searcher { cmd_rx, info_tx }
     }
 
+    pub fn run(self) {
+        loop {
+            match self.cmd_rx.recv() {
+                Ok(cmd) => match cmd {
+                    SearchCommand::Start { position } => {
+                        let (score, mv) = find_best_move(&position);
+                        let mv = mv.unwrap();
+                        self.info_tx
+                            .send(SearchInfo::Info {
+                                depth: 6,
+                                pv: vec![mv.clone()],
+                                score: Score::new(score, None),
+                            })
+                            .unwrap();
+                        self.info_tx.send(SearchInfo::BestMove(mv)).unwrap();
+                    }
+                    SearchCommand::Stop => {
+                        // Stop the search
+                    }
+                    SearchCommand::Quit => break,
+                },
+                Err(_) => {
+                    // Handle error
+                }
+            }
+        }
+    }
+}
+
+pub fn find_best_move(pos: &Chess) -> (i32, Option<Move>) {
     minimax(
         pos,
         6, // depth
