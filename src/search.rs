@@ -7,6 +7,11 @@ pub struct Searcher {
     info_tx: Sender<SearchInfo>,
 }
 
+struct MoveCandidate {
+    mv: Move,
+    next_position: Chess,
+}
+
 impl Searcher {
     pub fn new(cmd_rx: Receiver<SearchCommand>, info_tx: Sender<SearchInfo>) -> Self {
         Searcher { cmd_rx, info_tx }
@@ -15,9 +20,7 @@ impl Searcher {
     pub fn run(self) {
         loop {
             match self.cmd_rx.recv().unwrap() {
-                SearchCommand::Start { position, depth } => {
-                    self.search(position, depth);
-                }
+                SearchCommand::Start { position, depth } => self.search(position, depth),
                 SearchCommand::Stop => (),
                 SearchCommand::Quit => break,
             }
@@ -25,14 +28,58 @@ impl Searcher {
     }
 
     fn search(&self, position: Chess, depth: u8) {
-        let (score, pv) = negamax(&position, depth, i32::MIN + 1, i32::MAX, 0);
-        self.info_tx
-            .send(SearchInfo::Info {
-                depth: 6,
-                pv: pv.clone(),
-                score: score,
+        let mut moves: Vec<_> = position
+            .legal_moves()
+            .iter()
+            .map(|m| {
+                let mut pos = position.clone();
+                pos.play_unchecked(m);
+                (
+                    MoveCandidate {
+                        mv: m.clone(),
+                        next_position: pos,
+                    },
+                    0,
+                )
             })
-            .unwrap();
+            .collect();
+
+        let mut pv = Vec::new();
+
+        'outer: for d in 0..=depth - 1 {
+            let mut best_pv = Vec::new();
+            let mut best_score = i32::MIN + 1;
+
+            for (move_candidate, score) in &mut moves {
+                match self.cmd_rx.try_recv() {
+                    Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
+                    Ok(SearchCommand::Quit) => return,
+                    _ => (),
+                };
+
+                let (new_score, new_pv) =
+                    negamax(&move_candidate.next_position, d, i32::MIN + 1, i32::MAX, 0);
+                *score = -new_score;
+
+                if *score > best_score {
+                    best_score = *score;
+                    best_pv = vec![move_candidate.mv.clone()];
+                    best_pv.extend_from_slice(&new_pv);
+                }
+            }
+
+            moves.sort_by_key(|(_, score)| -*score);
+            pv = best_pv;
+
+            self.info_tx
+                .send(SearchInfo::Info {
+                    depth: d + 1,
+                    pv: pv.clone(),
+                    score: best_score,
+                })
+                .unwrap();
+        }
+
         self.info_tx
             .send(SearchInfo::BestMove(pv[0].clone()))
             .unwrap();
@@ -122,6 +169,8 @@ mod tests {
             .into_position(CastlingMode::Standard)
             .unwrap()
     }
+
+    // Source for test problems used in testing: https://wtharvey.com/m8n3.txt
 
     #[test]
     // Madame de Remusat vs Napoleon I, Paris, 1802
