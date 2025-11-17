@@ -4,7 +4,7 @@ use crate::{SearchCommand, SearchInfo};
 use chrono::Local;
 use crossbeam_channel::{select, Receiver, Sender};
 use shakmaty::{CastlingMode, Chess, Position};
-use shakmaty_uci::{UciInfo, UciMessage, UciMove};
+use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciMove, UciSearchControl};
 
 pub struct Controller {
     input_rx: Receiver<UciMessage>,
@@ -90,10 +90,24 @@ impl Controller {
                 }
                 self.position = position;
             }
+            UciMessage::Go {
+                search_control:
+                    Some(UciSearchControl {
+                        depth: Some(depth), ..
+                    }),
+                ..
+            } => self
+                .cmd_tx
+                .send(SearchCommand::Start {
+                    position: self.position.clone(),
+                    depth,
+                })
+                .unwrap(),
             UciMessage::Go { .. } => self
                 .cmd_tx
                 .send(SearchCommand::Start {
                     position: self.position.clone(),
+                    depth: 6,
                 })
                 .unwrap(),
             UciMessage::Stop => self.cmd_tx.send(SearchCommand::Stop).unwrap(),
@@ -111,7 +125,12 @@ impl Controller {
             SearchInfo::Info { depth, pv, score } => {
                 let info_msg = UciMessage::Info(UciInfo {
                     depth: Some(depth),
-                    score: Some(score.into()),
+                    score: Some(UciInfoScore {
+                        cp: Some(score),
+                        mate: None,
+                        lower_bound: false,
+                        upper_bound: false,
+                    }),
                     pv: pv
                         .into_iter()
                         .map(|mv| UciMove::from_move(&mv, CastlingMode::Standard))

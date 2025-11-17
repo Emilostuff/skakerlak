@@ -9,10 +9,10 @@ fn main() {
     let (info_tx, info_rx) = unbounded();
 
     // Spawn input listener thread
-    thread::spawn(move || InputListener::new(input_tx).run());
+    thread::spawn(|| InputListener::new(input_tx).run());
 
     // Spawn search thread
-    thread::spawn(move || Searcher::new(cmd_rx, info_tx).run());
+    thread::spawn(|| Searcher::new(cmd_rx, info_tx).run());
 
     // Run controller on main thread
     Controller::new(input_rx, cmd_tx, info_rx, "engine.log").run();
