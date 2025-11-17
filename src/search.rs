@@ -58,7 +58,7 @@ impl Searcher {
                 };
 
                 let (new_score, new_pv) =
-                    negamax(&move_candidate.next_position, d, i32::MIN + 1, i32::MAX, 0);
+                    negamax(&move_candidate.next_position, d, -i32::MAX, -best_score, 0);
                 *score = -new_score;
 
                 if *score > best_score {
@@ -111,6 +111,35 @@ fn eval(pos: &Chess, ply: u8) -> i32 {
     material_diff
 }
 
+fn order(mut moves: Vec<Move>) -> Vec<Move> {
+    moves.sort_by_key(|mv| -match mv {
+        Move::Normal {
+            capture: Some(_),
+            promotion: Some(_),
+            ..
+        } => 10,
+        Move::Normal {
+            capture: None,
+            promotion: Some(_),
+            ..
+        } => 7,
+        Move::EnPassant { .. } => 6,
+        Move::Normal {
+            capture: Some(_),
+            promotion: None,
+            ..
+        } => 5,
+        Move::Normal {
+            capture: None,
+            promotion: None,
+            ..
+        } => 2,
+        Move::Castle { .. } => 2,
+        _ => 0,
+    });
+    moves
+}
+
 pub fn negamax(pos: &Chess, depth: u8, mut alpha: i32, beta: i32, ply: u8) -> (i32, Vec<Move>) {
     if depth == 0 || pos.is_game_over() {
         return (eval(pos, ply), vec![]);
@@ -119,7 +148,7 @@ pub fn negamax(pos: &Chess, depth: u8, mut alpha: i32, beta: i32, ply: u8) -> (i
     let mut best_score = i32::MIN + 1;
     let mut best_line = vec![];
 
-    for mv in pos.legal_moves() {
+    for mv in order(pos.legal_moves().into_iter().collect()) {
         let mut new_pos = pos.clone();
         new_pos.play_unchecked(&mv);
 

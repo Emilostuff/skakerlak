@@ -107,7 +107,7 @@ impl Controller {
                 .cmd_tx
                 .send(SearchCommand::Start {
                     position: self.position.clone(),
-                    depth: 7,
+                    depth: 10,
                 })
                 .unwrap(),
             UciMessage::Stop => self.cmd_tx.send(SearchCommand::Stop).unwrap(),
