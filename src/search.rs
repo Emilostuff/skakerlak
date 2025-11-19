@@ -58,6 +58,17 @@ impl Searcher {
                     _ => (),
                 };
 
+                // Use pv from previous iteration to guide search (if it starts with the current move)
+                let pv_slice = if let Some(mv) = pv.first() {
+                    if mv == &move_candidate.mv {
+                        &[]
+                    } else {
+                        &[]
+                    }
+                } else {
+                    &[]
+                };
+
                 let (opponents_score, new_pv) = negamax(
                     &move_candidate.next_position,
                     d,
@@ -65,6 +76,7 @@ impl Searcher {
                     -best_score,
                     0,
                     &mut nodes,
+                    pv_slice,
                 );
 
                 *score = -opponents_score;
@@ -87,6 +99,11 @@ impl Searcher {
                     nodes,
                 })
                 .unwrap();
+
+            // if check found at this depth, don't search further
+            if best_score >= i32::MAX - depth as i32 {
+                break;
+            }
         }
 
         self.info_tx
@@ -156,6 +173,7 @@ pub fn negamax(
     beta: i32,
     ply: u8,
     nodes: &mut u64,
+    mut former_pv: &[Move],
 ) -> (i32, Vec<Move>) {
     *nodes += 1;
 
@@ -163,14 +181,38 @@ pub fn negamax(
         return (eval(pos, ply), vec![]);
     }
 
+    // Generate moves and order them
+    let mut moves = order(pos.legal_moves().into_iter().collect());
+
+    // if pv move exists, move it to the beginning of the list
+    if let Some(mv) = former_pv.first() {
+        moves.retain(|m| m != mv);
+        moves.insert(0, mv.clone());
+    }
+
     let mut best_score = i32::MIN + 1;
     let mut best_line = vec![];
 
-    for mv in order(pos.legal_moves().into_iter().collect()) {
+    for (i, mv) in moves.iter().enumerate() {
+        // If pv move is played, pass on rest of the pv
+        if i == 0 && former_pv.first().is_some() {
+            former_pv = &former_pv[1..];
+        } else {
+            former_pv = &[];
+        }
+
         let mut new_pos = pos.clone();
         new_pos.play_unchecked(&mv);
 
-        let (score, child_pv) = negamax(&new_pos, depth - 1, -beta, -alpha, ply + 1, nodes);
+        let (score, child_pv) = negamax(
+            &new_pos,
+            depth - 1,
+            -beta,
+            -alpha,
+            ply + 1,
+            nodes,
+            former_pv,
+        );
 
         let score = -score;
 
@@ -198,7 +240,7 @@ mod tests {
     fn find_mate(pos: Chess, in_n_moves: u8) -> Vec<Move> {
         let ply = in_n_moves * 2 - 1;
         let mut nodes = 0;
-        let (score, pv) = negamax(&pos, ply, i32::MIN + 1, i32::MAX, 0, &mut nodes);
+        let (score, pv) = negamax(&pos, ply, i32::MIN + 1, i32::MAX, 0, &mut nodes, &[]);
 
         assert_eq!(score, i32::MAX - ply as i32);
         assert_eq!(pv.len(), ply as usize);
