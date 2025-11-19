@@ -19,5 +19,6 @@ pub enum SearchInfo {
         depth: u8,
         pv: Vec<shakmaty::Move>,
         score: i32,
+        nodes: u64,
     },
 }

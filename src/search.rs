@@ -47,6 +47,7 @@ impl Searcher {
         let mut pv = Vec::new();
 
         'outer: for d in 0..=depth - 1 {
+            let mut nodes = 0;
             let mut best_pv = Vec::new();
             let mut best_score = i32::MIN + 1;
 
@@ -57,9 +58,16 @@ impl Searcher {
                     _ => (),
                 };
 
-                let (new_score, new_pv) =
-                    negamax(&move_candidate.next_position, d, -i32::MAX, -best_score, 0);
-                *score = -new_score;
+                let (opponents_score, new_pv) = negamax(
+                    &move_candidate.next_position,
+                    d,
+                    -i32::MAX,
+                    -best_score,
+                    0,
+                    &mut nodes,
+                );
+
+                *score = -opponents_score;
 
                 if *score > best_score {
                     best_score = *score;
@@ -76,6 +84,7 @@ impl Searcher {
                     depth: d + 1,
                     pv: pv.clone(),
                     score: best_score,
+                    nodes,
                 })
                 .unwrap();
         }
@@ -140,7 +149,16 @@ fn order(mut moves: Vec<Move>) -> Vec<Move> {
     moves
 }
 
-pub fn negamax(pos: &Chess, depth: u8, mut alpha: i32, beta: i32, ply: u8) -> (i32, Vec<Move>) {
+pub fn negamax(
+    pos: &Chess,
+    depth: u8,
+    mut alpha: i32,
+    beta: i32,
+    ply: u8,
+    nodes: &mut u64,
+) -> (i32, Vec<Move>) {
+    *nodes += 1;
+
     if depth == 0 || pos.is_game_over() {
         return (eval(pos, ply), vec![]);
     }
@@ -152,7 +170,7 @@ pub fn negamax(pos: &Chess, depth: u8, mut alpha: i32, beta: i32, ply: u8) -> (i
         let mut new_pos = pos.clone();
         new_pos.play_unchecked(&mv);
 
-        let (score, child_pv) = negamax(&new_pos, depth - 1, -beta, -alpha, ply + 1);
+        let (score, child_pv) = negamax(&new_pos, depth - 1, -beta, -alpha, ply + 1, nodes);
 
         let score = -score;
 
@@ -179,7 +197,8 @@ mod tests {
 
     fn find_mate(pos: Chess, in_n_moves: u8) -> Vec<Move> {
         let ply = in_n_moves * 2 - 1;
-        let (score, pv) = negamax(&pos, ply, i32::MIN + 1, i32::MAX, 0);
+        let mut nodes = 0;
+        let (score, pv) = negamax(&pos, ply, i32::MIN + 1, i32::MAX, 0, &mut nodes);
 
         assert_eq!(score, i32::MAX - ply as i32);
         assert_eq!(pv.len(), ply as usize);

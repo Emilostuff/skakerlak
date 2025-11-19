@@ -122,7 +122,12 @@ impl Controller {
                 best_move: UciMove::from_move(&mv, CastlingMode::Standard),
                 ponder: None,
             }),
-            SearchInfo::Info { depth, pv, score } => {
+            SearchInfo::Info {
+                depth,
+                pv,
+                score,
+                nodes,
+            } => {
                 let info_msg = UciMessage::Info(UciInfo {
                     depth: Some(depth),
                     score: Some(UciInfoScore {
@@ -137,7 +142,7 @@ impl Controller {
                         .collect(),
                     sel_depth: None,
                     time: None,
-                    nodes: None,
+                    nodes: Some(nodes),
                     multi_pv: None,
                     curr_move: None,
                     curr_move_num: None,
