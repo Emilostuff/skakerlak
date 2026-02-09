@@ -7,3 +7,6 @@ run:
 
 watch:
     @tail -f target/release/engine.log
+
+test arg="":
+    cargo nextest run -r {{ arg }}

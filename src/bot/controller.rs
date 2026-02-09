@@ -1,10 +1,9 @@
-use std::{fs::OpenOptions, io::Write};
-
 use crate::{SearchCommand, SearchInfo};
 use chrono::Local;
 use crossbeam_channel::{select, Receiver, Sender};
 use shakmaty::{CastlingMode, Chess, Position};
 use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciMove, UciSearchControl};
+use std::{fs::OpenOptions, io::Write};
 
 pub struct Controller {
     input_rx: Receiver<UciMessage>,
@@ -140,20 +139,9 @@ impl Controller {
                         .into_iter()
                         .map(|mv| UciMove::from_move(&mv, CastlingMode::Standard))
                         .collect(),
-                    sel_depth: None,
-                    time: None,
                     nodes: Some(nodes),
-                    multi_pv: None,
-                    curr_move: None,
-                    curr_move_num: None,
-                    hash_full: None,
-                    nps: None,
-                    tb_hits: None,
-                    sb_hits: None,
-                    cpu_load: None,
-                    string: None,
-                    refutation: vec![],
-                    curr_line: vec![],
+
+                    ..Default::default()
                 });
 
                 self.send(info_msg);

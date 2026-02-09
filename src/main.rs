@@ -1,5 +1,6 @@
 use crossbeam_channel::unbounded;
-use skakarlak::{controller::Controller, input::InputListener, search::Searcher};
+use skakarlak::bot::{controller::Controller, input::InputListener};
+use skakarlak::search::Searcher;
 use std::thread;
 
 fn main() {

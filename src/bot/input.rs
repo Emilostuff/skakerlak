@@ -2,6 +2,7 @@ use crossbeam_channel::Sender;
 use shakmaty_uci::UciMessage;
 use std::io::{self, BufRead};
 
+/// Listens for UCI commands on stdin and forwards them to the input channel.
 pub struct InputListener {
     input_tx: Sender<UciMessage>,
 }
@@ -13,18 +14,17 @@ impl InputListener {
 
     pub fn run(self) {
         let stdin = io::stdin();
+
+        // Listen while stdin is open
         for line_result in stdin.lock().lines() {
-            let line = match line_result {
-                Ok(l) => l,
-                Err(_) => continue, // skip lines that can't be read
-            };
+            let line = if let Ok(l) = line_result { l } else { continue };
 
             let trimmed = line.trim();
             if trimmed.is_empty() {
-                continue; // skip empty lines
+                continue;
             }
 
-            // Try to parse as UciMessage, ignore parse errors
+            // Try to parse as UciMessage. Ignore invalid input.
             if let Ok(msg) = trimmed.parse::<UciMessage>() {
                 self.input_tx.send(msg).unwrap();
             }
