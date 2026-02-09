@@ -1,40 +1,37 @@
+pub mod material;
 pub mod order;
+pub mod phase;
 pub mod pst;
 
-use shakmaty::{Chess, Position, Role};
+use crate::eval::{material::material_score, phase::Phase, pst::position_score};
+use shakmaty::{Chess, Position};
 
+/// Evaluates the current position.
 pub fn evaluate(pos: &Chess, ply: u8) -> i32 {
-    // check for end of game
+    // First check for termination
     if pos.is_checkmate() {
+        // Add one per ply to express mate in x moves (offset +1 due to i32 range assymetry).
         return i32::MIN + 1 + ply as i32;
     } else if pos.is_game_over() {
+        // Draw
         return 0;
     }
 
-    let phase = pst::calculate_phase(pos);
+    // Calculate phase
+    let phase = Phase::new(pos);
 
-    let mut material_diff = 0;
+    // Accumulator
+    let mut diff = 0;
 
     for (square, piece) in pos.board().iter() {
-        let material = match piece.role {
-            Role::Pawn => 100,
-            Role::Knight => 320,
-            Role::Bishop => 330,
-            Role::Rook => 500,
-            Role::Queen => 900,
-            Role::King => 0,
-        };
-
-        let position = pst::position_score(piece, square, phase);
-
-        let total = material + position;
+        let score = material_score(piece.role) + position_score(piece, square, &phase);
 
         if piece.color == pos.turn() {
-            material_diff += total;
+            diff += score;
         } else {
-            material_diff -= total;
+            diff -= score;
         }
     }
 
-    material_diff
+    diff
 }
