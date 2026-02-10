@@ -78,13 +78,14 @@ pub fn negamax(
 
     // 2️⃣ Terminal node
     if depth == 0 || board.is_game_over() {
-        // return quiescence(board, alpha, beta, ply);
-        return evaluate(board, ply);
+        return quiescence(board, alpha, beta, ply);
+        //return evaluate(board, ply);
     }
 
     let mut best_score = i32::MIN + 1;
     let mut best_move = None;
     let mut alpha = alpha;
+    let alpha_orig = alpha;
 
     // 3️⃣ Generate legal moves
     let mut moves = board.legal_moves();
@@ -117,7 +118,7 @@ pub fn negamax(
     }
 
     // 8️⃣ Store TT entry
-    let bound = if best_score <= alpha {
+    let bound = if best_score <= alpha_orig {
         Bound::Upper
     } else if best_score >= beta {
         Bound::Lower
@@ -136,4 +137,24 @@ pub fn negamax(
     );
 
     best_score
+}
+
+fn quiescence(board: &Chess, alpha: i32, beta: i32, ply: u8) -> i32 {
+    let stand_pat = evaluate(board, ply);
+    if stand_pat >= beta {
+        return beta;
+    }
+    let mut alpha = alpha.max(stand_pat);
+
+    for mv in board.legal_moves().iter().filter(|m| m.is_capture()) {
+        let mut new_board = board.clone();
+        new_board.play_unchecked(mv);
+        let score = -quiescence(&new_board, -beta, -alpha, ply + 1);
+        if score >= beta {
+            return beta;
+        }
+        alpha = alpha.max(score);
+    }
+
+    alpha
 }
