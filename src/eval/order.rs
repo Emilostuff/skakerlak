@@ -1,7 +1,7 @@
-use shakmaty::Move;
+use shakmaty::{Move, MoveList};
 
 /// Sorts a list of moves in order of how promising they are.
-pub fn order(mut moves: Vec<Move>) -> Vec<Move> {
+pub fn order(mut moves: MoveList) -> MoveList {
     moves.sort_by_key(|mv| -match mv {
         // Capture AND promote
         Move::Normal {

@@ -17,9 +17,9 @@ pub fn negamax(
     }
 
     // Generate moves and order them
-    let mut moves = order(pos.legal_moves().into_iter().collect());
+    let mut moves = order(pos.legal_moves());
 
-    // if pv move exists, move it to the beginning of the list
+    //if pv move exists, move it to the beginning of the list
     if let Some(mv) = former_pv.first() {
         moves.retain(|m| m != mv);
         moves.insert(0, mv.clone());
