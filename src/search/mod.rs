@@ -2,21 +2,31 @@ pub mod negamax;
 
 use negamax::negamax;
 
-use crate::{search::negamax::TranspositionTable, SearchCommand, SearchControl, SearchInfo};
+use crate::{
+    eval::order, search::negamax::TranspositionTable, SearchCommand, SearchControl, SearchInfo,
+};
 use crossbeam_channel::{Receiver, Sender};
-use shakmaty::{Chess, Move, Position};
+use shakmaty::{
+    zobrist::{Zobrist64, ZobristHash},
+    Chess, EnPassantMode, Move, Position,
+};
 
 pub struct Searcher {
     cmd_rx: Receiver<SearchCommand>,
     info_tx: Sender<SearchInfo>,
+    tt: TranspositionTable,
 }
 
 impl Searcher {
     pub fn new(cmd_rx: Receiver<SearchCommand>, info_tx: Sender<SearchInfo>) -> Self {
-        Searcher { cmd_rx, info_tx }
+        Searcher {
+            cmd_rx,
+            info_tx,
+            tt: TranspositionTable::new(10000),
+        }
     }
 
-    pub fn run(self) {
+    pub fn run(mut self) {
         loop {
             match self.cmd_rx.recv().unwrap() {
                 SearchCommand::Start { position, control } => self.search(position, control),
@@ -26,7 +36,7 @@ impl Searcher {
         }
     }
 
-    fn search(&self, position: Chess, control: SearchControl) {
+    fn search(&mut self, position: Chess, control: SearchControl) {
         let start_time = std::time::Instant::now();
 
         // Determine sarch constraints
@@ -43,8 +53,6 @@ impl Searcher {
         // };
         //
 
-        let mut tt = TranspositionTable::new(10000);
-
         /////////
         let mut best_move = None;
         let mut best_score = i32::MIN + 1;
@@ -57,13 +65,16 @@ impl Searcher {
             let mut moves = position.legal_moves();
 
             // 1️⃣ TT move ordering: try previous best move first
-            // if let Some(tt_entry) = tt.lookup(.zobrist_key) {
-            //     if let Some(tt_best) = tt_entry.best_move {
-            //         if let Some(idx) = moves.iter().position(|m| *m == tt_best) {
-            //             moves.swap(0, idx);
-            //         }
-            //     }
-            // }
+            let hash = position.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
+            if let Some(tt_entry) = self.tt.lookup(hash) {
+                if let Some(tt_best_move) = &tt_entry.best_move {
+                    if let Some(i) = moves.iter().position(|m| m == tt_best_move) {
+                        moves.swap(0, i);
+                    }
+                }
+            }
+
+            moves = order::order(moves);
 
             for mv in moves {
                 // if stop_flag.load(Ordering::Relaxed) {
@@ -73,7 +84,7 @@ impl Searcher {
                 let mut new_pos = position.clone();
                 new_pos.play_unchecked(&mv);
 
-                let score = -negamax(&new_pos, depth - 1, i32::MIN + 1, i32::MAX, 1, &mut tt);
+                let score = -negamax(&new_pos, depth - 1, i32::MIN + 1, i32::MAX, 1, &mut self.tt);
 
                 if score > iteration_best_score {
                     iteration_best_score = score;

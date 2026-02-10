@@ -1,4 +1,4 @@
-use crate::eval::evaluate;
+use crate::eval::{evaluate, order};
 use shakmaty::{
     zobrist::{Zobrist64, ZobristHash},
     Chess, EnPassantMode, Move, Position,
@@ -13,10 +13,10 @@ pub enum Bound {
 
 #[derive(Clone, Debug)]
 pub struct TTEntry {
-    score: i32,
-    depth: u8,
-    bound: Bound,
-    best_move: Option<Move>,
+    pub score: i32,
+    pub depth: u8,
+    pub bound: Bound,
+    pub best_move: Option<Move>,
 }
 
 use std::collections::HashMap;
@@ -34,11 +34,11 @@ impl TranspositionTable {
         }
     }
 
-    fn lookup(&self, key: Zobrist64) -> Option<&TTEntry> {
+    pub fn lookup(&self, key: Zobrist64) -> Option<&TTEntry> {
         self.table.get(&key)
     }
 
-    fn store(&mut self, key: Zobrist64, entry: TTEntry) {
+    pub fn store(&mut self, key: Zobrist64, entry: TTEntry) {
         if self.table.len() >= self.max_size {
             // simple replacement: remove random or first inserted
             // advanced: use depth-prefer replacement
@@ -90,13 +90,15 @@ pub fn negamax(
     let mut moves = board.legal_moves();
 
     // 4️⃣ Move ordering: TT best move first
-    // if let Some(tt_entry) = tt.lookup(hash) {
-    //     if let Some(tt_best_move) = &tt_entry.best_move {
-    //         if moves.contains(&tt_best_move) {
-    //             moves.swap(0, moves.iter().position(|m| m == tt_best_move).unwrap());
-    //         }
-    //     }
-    // }
+    if let Some(tt_entry) = tt.lookup(hash) {
+        if let Some(tt_best_move) = &tt_entry.best_move {
+            if let Some(i) = moves.iter().position(|m| m == tt_best_move) {
+                moves.swap(0, i);
+            }
+        }
+    }
+
+    moves = order::order(moves);
 
     for mv in moves {
         let mut new_pos = board.clone();
