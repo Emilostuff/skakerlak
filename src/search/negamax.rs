@@ -1,57 +1,14 @@
-use crate::eval::{evaluate, order};
+use crate::{
+    eval::order,
+    search::{
+        quiescence::quiescence,
+        transposition::{Bound, TTEntry, TranspositionTable},
+    },
+};
 use shakmaty::{
     zobrist::{Zobrist64, ZobristHash},
-    Chess, EnPassantMode, Move, Position,
+    Chess, EnPassantMode, Position,
 };
-
-#[derive(Copy, Clone, Debug)]
-pub enum Bound {
-    Exact,
-    Lower,
-    Upper,
-}
-
-#[derive(Clone, Debug)]
-pub struct TTEntry {
-    pub score: i32,
-    pub depth: u8,
-    pub bound: Bound,
-    pub best_move: Option<Move>,
-}
-
-use std::collections::HashMap;
-
-pub struct TranspositionTable {
-    table: HashMap<Zobrist64, TTEntry>, // simple first implementation
-    max_size: usize,
-}
-
-impl TranspositionTable {
-    pub fn new(max_size: usize) -> Self {
-        Self {
-            table: HashMap::with_capacity(max_size),
-            max_size,
-        }
-    }
-
-    pub fn lookup(&self, key: Zobrist64) -> Option<&TTEntry> {
-        self.table.get(&key)
-    }
-
-    pub fn store(&mut self, key: Zobrist64, entry: TTEntry) {
-        if self.table.len() >= self.max_size {
-            // simple replacement: remove random or first inserted
-            // advanced: use depth-prefer replacement
-            let first_key = *self.table.keys().next().unwrap();
-            self.table.remove(&first_key);
-        }
-        self.table.insert(key, entry);
-    }
-
-    fn clear(&mut self) {
-        self.table.clear();
-    }
-}
 
 pub fn negamax(
     board: &Chess,
@@ -79,7 +36,6 @@ pub fn negamax(
     // 2️⃣ Terminal node
     if depth == 0 || board.is_game_over() {
         return quiescence(board, alpha, beta, ply);
-        //return evaluate(board, ply);
     }
 
     let mut best_score = i32::MIN + 1;
@@ -137,24 +93,4 @@ pub fn negamax(
     );
 
     best_score
-}
-
-fn quiescence(board: &Chess, alpha: i32, beta: i32, ply: u8) -> i32 {
-    let stand_pat = evaluate(board, ply);
-    if stand_pat >= beta {
-        return beta;
-    }
-    let mut alpha = alpha.max(stand_pat);
-
-    for mv in board.legal_moves().iter().filter(|m| m.is_capture()) {
-        let mut new_board = board.clone();
-        new_board.play_unchecked(mv);
-        let score = -quiescence(&new_board, -beta, -alpha, ply + 1);
-        if score >= beta {
-            return beta;
-        }
-        alpha = alpha.max(score);
-    }
-
-    alpha
 }

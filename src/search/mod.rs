@@ -1,14 +1,17 @@
 pub mod negamax;
+pub mod quiescence;
+pub mod transposition;
 
 use negamax::negamax;
 
 use crate::{
-    eval::order, search::negamax::TranspositionTable, SearchCommand, SearchControl, SearchInfo,
+    eval::order, search::transposition::TranspositionTable, SearchCommand, SearchControl,
+    SearchInfo,
 };
 use crossbeam_channel::{Receiver, Sender};
 use shakmaty::{
     zobrist::{Zobrist64, ZobristHash},
-    Chess, EnPassantMode, Move, Position,
+    Chess, EnPassantMode, Position,
 };
 
 pub struct Searcher {
@@ -22,7 +25,7 @@ impl Searcher {
         Searcher {
             cmd_rx,
             info_tx,
-            tt: TranspositionTable::new(10000),
+            tt: TranspositionTable::new(100000),
         }
     }
 
