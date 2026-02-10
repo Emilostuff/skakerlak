@@ -2,18 +2,13 @@ pub mod negamax;
 
 use negamax::negamax;
 
-use crate::{SearchCommand, SearchControl, SearchInfo};
+use crate::{search::negamax::TranspositionTable, SearchCommand, SearchControl, SearchInfo};
 use crossbeam_channel::{Receiver, Sender};
 use shakmaty::{Chess, Move, Position};
 
 pub struct Searcher {
     cmd_rx: Receiver<SearchCommand>,
     info_tx: Sender<SearchInfo>,
-}
-
-struct MoveCandidate {
-    mv: Move,
-    next_position: Chess,
 }
 
 impl Searcher {
@@ -35,94 +30,81 @@ impl Searcher {
         let start_time = std::time::Instant::now();
 
         // Determine sarch constraints
-        let (depth, time_limit) = match control {
+        let (max_depth, time_limit) = match control {
             SearchControl::ToDepth(depth) => (depth, u64::MAX),
             SearchControl::TimeLimit(time_limit) => (u8::MAX, time_limit),
         };
 
-        let mut moves: Vec<_> = position
-            .legal_moves()
-            .iter()
-            .map(|m| {
-                let mut pos = position.clone();
-                pos.play_unchecked(m);
-                (
-                    MoveCandidate {
-                        mv: m.clone(),
-                        next_position: pos,
-                    },
-                    0,
-                )
-            })
-            .collect();
+        // Check for external interrupts
+        // match self.cmd_rx.try_recv() {
+        //     Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
+        //     Ok(SearchCommand::Quit) => return,
+        //     _ => (),
+        // };
+        //
 
-        let mut pv = Vec::new();
+        let mut tt = TranspositionTable::new(10000);
 
-        'outer: for d in 0..=depth - 1 {
-            let mut nodes = 0;
-            let mut best_pv = Vec::new();
-            let mut best_score = i32::MIN + 1;
+        /////////
+        let mut best_move = None;
+        let mut best_score = i32::MIN + 1;
 
-            for (move_candidate, score) in &mut moves {
-                // Check for external interrupts
-                match self.cmd_rx.try_recv() {
-                    Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
-                    Ok(SearchCommand::Quit) => return,
-                    _ => (),
-                };
+        for depth in 1..=max_depth {
+            // Optional: reset per-iteration stats
+            let mut iteration_best_move = None;
+            let mut iteration_best_score = i32::MIN + 1;
 
-                // Check time left
-                let elapsed = start_time.elapsed();
-                if elapsed > std::time::Duration::from_millis((time_limit as f32 * 0.9) as u64) {
-                    break 'outer;
-                }
+            let mut moves = position.legal_moves();
 
-                // Use pv from previous iteration to guide search (if it starts with the current move)
-                let pv_slice = if let Some(mv) = pv.first() {
-                    if mv == &move_candidate.mv {
-                        &[]
-                    } else {
-                        &[]
-                    }
-                } else {
-                    &[]
-                };
+            // 1️⃣ TT move ordering: try previous best move first
+            // if let Some(tt_entry) = tt.lookup(.zobrist_key) {
+            //     if let Some(tt_best) = tt_entry.best_move {
+            //         if let Some(idx) = moves.iter().position(|m| *m == tt_best) {
+            //             moves.swap(0, idx);
+            //         }
+            //     }
+            // }
 
-                let (opponents_score, new_pv) = negamax(
-                    &move_candidate.next_position,
-                    d,
-                    -i32::MAX,
-                    -best_score,
-                    0,
-                    &mut nodes,
-                    pv_slice,
-                );
+            for mv in moves {
+                // if stop_flag.load(Ordering::Relaxed) {
+                //     break; // abort search
+                // }
 
-                *score = -opponents_score;
+                let mut new_pos = position.clone();
+                new_pos.play_unchecked(&mv);
 
-                if *score > best_score {
-                    best_score = *score;
-                    best_pv = vec![move_candidate.mv.clone()];
-                    best_pv.extend_from_slice(&new_pv);
+                let score = -negamax(&new_pos, depth - 1, i32::MIN + 1, i32::MAX, 1, &mut tt);
+
+                if score > iteration_best_score {
+                    iteration_best_score = score;
+                    iteration_best_move = Some(mv);
                 }
             }
 
-            moves.sort_by_key(|(_, score)| -*score);
-            pv = best_pv;
+            // 2️⃣ Update global best from this iteration
+            if let Some(iter_move) = iteration_best_move {
+                best_move = Some(iter_move);
+                best_score = iteration_best_score;
+            }
+
+            // 3️⃣ Extract PV from TT for reporting
+            //let pv = extract_pv(board, tt);
+
+            // 4️⃣ Optionally: send info (depth, score, nodes, pv) to UI
+
+            // Stop early if the stop flag triggered
+            // if stop_flag.load(Ordering::Relaxed) {
+            //     break;
+            // }
 
             self.info_tx
                 .send(SearchInfo::Info {
-                    depth: d + 1,
-                    pv: pv.clone(),
+                    depth,
+                    pv: vec![best_move.clone().unwrap()],
                     score: best_score,
-                    nodes,
+                    nodes: 1234,
                 })
                 .unwrap();
-
-            // if check found at this depth, don't search further
-            if best_score >= i32::MAX - depth as i32 {
-                break;
-            }
 
             // Check time left
             let elapsed = start_time.elapsed();
@@ -131,9 +113,10 @@ impl Searcher {
             }
         }
 
+        let best_move = best_move.expect("No legal moves found");
+        //let pv = extract_pv(board, tt);
+
         // Output best move
-        self.info_tx
-            .send(SearchInfo::BestMove(pv[0].clone()))
-            .unwrap();
+        self.info_tx.send(SearchInfo::BestMove(best_move)).unwrap();
     }
 }

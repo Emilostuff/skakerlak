@@ -1,67 +1,137 @@
-use crate::eval::{evaluate, order::order};
-use shakmaty::{Chess, Move, Position};
+use crate::eval::evaluate;
+use shakmaty::{
+    zobrist::{Zobrist64, ZobristHash},
+    Chess, EnPassantMode, Move, Position,
+};
 
-pub fn negamax(
-    pos: &Chess,
+#[derive(Copy, Clone, Debug)]
+pub enum Bound {
+    Exact,
+    Lower,
+    Upper,
+}
+
+#[derive(Clone, Debug)]
+pub struct TTEntry {
+    score: i32,
     depth: u8,
-    mut alpha: i32,
-    beta: i32,
-    ply: u8,
-    nodes: &mut u64,
-    mut former_pv: &[Move],
-) -> (i32, Vec<Move>) {
-    *nodes += 1;
+    bound: Bound,
+    best_move: Option<Move>,
+}
 
-    if depth == 0 || pos.is_game_over() {
-        return (evaluate(pos, ply), vec![]);
+use std::collections::HashMap;
+
+pub struct TranspositionTable {
+    table: HashMap<Zobrist64, TTEntry>, // simple first implementation
+    max_size: usize,
+}
+
+impl TranspositionTable {
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            table: HashMap::with_capacity(max_size),
+            max_size,
+        }
     }
 
-    // Generate moves and order them
-    let mut moves = order(pos.legal_moves());
+    fn lookup(&self, key: Zobrist64) -> Option<&TTEntry> {
+        self.table.get(&key)
+    }
 
-    //if pv move exists, move it to the beginning of the list
-    if let Some(mv) = former_pv.first() {
-        moves.retain(|m| m != mv);
-        moves.insert(0, mv.clone());
+    fn store(&mut self, key: Zobrist64, entry: TTEntry) {
+        if self.table.len() >= self.max_size {
+            // simple replacement: remove random or first inserted
+            // advanced: use depth-prefer replacement
+            let first_key = *self.table.keys().next().unwrap();
+            self.table.remove(&first_key);
+        }
+        self.table.insert(key, entry);
+    }
+
+    fn clear(&mut self) {
+        self.table.clear();
+    }
+}
+
+pub fn negamax(
+    board: &Chess,
+    depth: u8,
+    alpha: i32,
+    beta: i32,
+    ply: u8,
+    tt: &mut TranspositionTable,
+) -> i32 {
+    // hash board state
+    let hash = board.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
+
+    // 1️⃣ Check for TT hit
+    if let Some(entry) = tt.lookup(hash) {
+        if entry.depth >= depth {
+            match entry.bound {
+                Bound::Exact => return entry.score,
+                Bound::Lower if entry.score >= beta => return entry.score,
+                Bound::Upper if entry.score <= alpha => return entry.score,
+                _ => {} // otherwise fall through
+            }
+        }
+    }
+
+    // 2️⃣ Terminal node
+    if depth == 0 || board.is_game_over() {
+        // return quiescence(board, alpha, beta, ply);
+        return evaluate(board, ply);
     }
 
     let mut best_score = i32::MIN + 1;
-    let mut best_line = vec![];
+    let mut best_move = None;
+    let mut alpha = alpha;
 
-    for (i, mv) in moves.iter().enumerate() {
-        // If pv move is played, pass on rest of the pv
-        if i == 0 && former_pv.first().is_some() {
-            former_pv = &former_pv[1..];
-        } else {
-            former_pv = &[];
-        }
+    // 3️⃣ Generate legal moves
+    let mut moves = board.legal_moves();
 
-        let mut new_pos = pos.clone();
+    // 4️⃣ Move ordering: TT best move first
+    // if let Some(tt_entry) = tt.lookup(hash) {
+    //     if let Some(tt_best_move) = &tt_entry.best_move {
+    //         if moves.contains(&tt_best_move) {
+    //             moves.swap(0, moves.iter().position(|m| m == tt_best_move).unwrap());
+    //         }
+    //     }
+    // }
+
+    for mv in moves {
+        let mut new_pos = board.clone();
         new_pos.play_unchecked(&mv);
-
-        let (score, child_pv) = negamax(
-            &new_pos,
-            depth - 1,
-            -beta,
-            -alpha,
-            ply + 1,
-            nodes,
-            former_pv,
-        );
-
-        let score = -score;
+        let score = -negamax(&mut new_pos, depth - 1, -beta, -alpha, ply + 1, tt);
 
         if score > best_score {
             best_score = score;
-            best_line = vec![mv.clone()];
-            best_line.extend(child_pv);
+            best_move = Some(mv); // <- track the move that actually gave best_score
         }
 
         alpha = alpha.max(score);
         if alpha >= beta {
-            break;
+            break; // beta cutoff
         }
     }
 
-    (best_score, best_line)
+    // 8️⃣ Store TT entry
+    let bound = if best_score <= alpha {
+        Bound::Upper
+    } else if best_score >= beta {
+        Bound::Lower
+    } else {
+        Bound::Exact
+    };
+
+    tt.store(
+        hash,
+        TTEntry {
+            score: best_score,
+            depth,
+            bound,
+            best_move, // best move found at this node
+        },
+    );
+
+    best_score
 }
