@@ -1,4 +1,4 @@
-use crate::{SearchCommand, SearchInfo};
+use crate::{SearchCommand, SearchControl, SearchInfo};
 use chrono::Local;
 use crossbeam_channel::{select, Receiver, Sender};
 use shakmaty::{CastlingMode, Chess, Position};
@@ -99,14 +99,14 @@ impl Controller {
                 .cmd_tx
                 .send(SearchCommand::Start {
                     position: self.position.clone(),
-                    depth,
+                    control: SearchControl::ToDepth(depth),
                 })
                 .unwrap(),
             UciMessage::Go { .. } => self
                 .cmd_tx
                 .send(SearchCommand::Start {
                     position: self.position.clone(),
-                    depth: 10,
+                    control: SearchControl::TimeLimit(2000),
                 })
                 .unwrap(),
             UciMessage::Stop => self.cmd_tx.send(SearchCommand::Stop).unwrap(),

@@ -2,7 +2,7 @@ pub mod negamax;
 
 use negamax::negamax;
 
-use crate::{SearchCommand, SearchInfo};
+use crate::{SearchCommand, SearchControl, SearchInfo};
 use crossbeam_channel::{Receiver, Sender};
 use shakmaty::{Chess, Move, Position};
 
@@ -24,14 +24,22 @@ impl Searcher {
     pub fn run(self) {
         loop {
             match self.cmd_rx.recv().unwrap() {
-                SearchCommand::Start { position, depth } => self.search(position, depth),
+                SearchCommand::Start { position, control } => self.search(position, control),
                 SearchCommand::Stop => (),
                 SearchCommand::Quit => break,
             }
         }
     }
 
-    fn search(&self, position: Chess, depth: u8) {
+    fn search(&self, position: Chess, control: SearchControl) {
+        let start_time = std::time::Instant::now();
+
+        // Determine sarch constraints
+        let (depth, time_limit) = match control {
+            SearchControl::ToDepth(depth) => (depth, u64::MAX),
+            SearchControl::TimeLimit(time_limit) => (u8::MAX, time_limit),
+        };
+
         let mut moves: Vec<_> = position
             .legal_moves()
             .iter()
@@ -56,11 +64,18 @@ impl Searcher {
             let mut best_score = i32::MIN + 1;
 
             for (move_candidate, score) in &mut moves {
+                // Check for external interrupts
                 match self.cmd_rx.try_recv() {
                     Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
                     Ok(SearchCommand::Quit) => return,
                     _ => (),
                 };
+
+                // Check time left
+                let elapsed = start_time.elapsed();
+                if elapsed > std::time::Duration::from_millis((time_limit as f32 * 0.9) as u64) {
+                    break 'outer;
+                }
 
                 // Use pv from previous iteration to guide search (if it starts with the current move)
                 let pv_slice = if let Some(mv) = pv.first() {
@@ -108,8 +123,15 @@ impl Searcher {
             if best_score >= i32::MAX - depth as i32 {
                 break;
             }
+
+            // Check time left
+            let elapsed = start_time.elapsed();
+            if elapsed > std::time::Duration::from_millis(time_limit / 2) {
+                break;
+            }
         }
 
+        // Output best move
         self.info_tx
             .send(SearchInfo::BestMove(pv[0].clone()))
             .unwrap();

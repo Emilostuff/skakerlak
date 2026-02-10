@@ -1,30 +1,36 @@
 use shakmaty::Move;
 
+/// Sorts a list of moves in order of how promising they are.
 pub fn order(mut moves: Vec<Move>) -> Vec<Move> {
     moves.sort_by_key(|mv| -match mv {
+        // Capture AND promote
         Move::Normal {
             capture: Some(_),
             promotion: Some(_),
             ..
         } => 10,
+
+        // Promote
         Move::Normal {
-            capture: None,
-            promotion: Some(_),
-            ..
+            promotion: Some(_), ..
         } => 7,
+
+        // En passant
         Move::EnPassant { .. } => 6,
+
+        // Capture
         Move::Normal {
-            capture: Some(_),
-            promotion: None,
-            ..
+            capture: Some(_), ..
         } => 5,
-        Move::Normal {
-            capture: None,
-            promotion: None,
-            ..
-        } => 2,
-        Move::Castle { .. } => 2,
-        _ => 0,
+
+        // Castling
+        Move::Castle { .. } => 3,
+
+        // Regular move
+        Move::Normal { .. } => 2,
+
+        // Not applicable in regular chess
+        Move::Put { .. } => 0,
     });
     moves
 }

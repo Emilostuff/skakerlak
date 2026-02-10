@@ -3,10 +3,18 @@ pub mod eval;
 pub mod search;
 
 /// Instructions for the search thread
+pub enum SearchControl {
+    // Search to a given depth
+    ToDepth(u8),
+    // Search for a approximate duration (in milliseconds)
+    TimeLimit(u64),
+}
+
+/// Instructions for the search thread
 pub enum SearchCommand {
     Start {
         position: shakmaty::Chess,
-        depth: u8,
+        control: SearchControl,
     },
     Stop,
     Quit,

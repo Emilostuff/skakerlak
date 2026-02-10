@@ -1,5 +1,6 @@
 use shakmaty::Role;
 
+/// Evaluates the material score of a piece.
 #[inline(always)]
 pub const fn material_score(role: Role) -> i32 {
     match role {

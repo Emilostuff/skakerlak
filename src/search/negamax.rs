@@ -65,25 +65,3 @@ pub fn negamax(
 
     (best_score, best_line)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use shakmaty::{Chess, Move};
-
-    // #[test]
-    // fn test_negamax() {
-    //     let pos = Chess::default();
-    //     let depth = 3;
-    //     let alpha = i32::MIN;
-    //     let beta = i32::MAX;
-    //     let ply = 0;
-    //     let mut nodes = 0;
-    //     let former_pv = &[];
-
-    //     let (score, line) = negamax(&pos, depth, alpha, beta, ply, &mut nodes, former_pv);
-
-    //     assert_eq!(score, 0);
-    //     assert_eq!(line, vec![]);
-    // }
-}
