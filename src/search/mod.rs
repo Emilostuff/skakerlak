@@ -48,19 +48,10 @@ impl Searcher {
             SearchControl::TimeLimit(time_limit) => (u8::MAX, time_limit),
         };
 
-        // Check for external interrupts
-        // match self.cmd_rx.try_recv() {
-        //     Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
-        //     Ok(SearchCommand::Quit) => return,
-        //     _ => (),
-        // };
-        //
-
-        /////////
         let mut best_move = None;
         let mut best_score = i32::MIN + 1;
 
-        for depth in 1..=max_depth {
+        'outer: for depth in 1..=max_depth {
             // Optional: reset per-iteration stats
             let mut iteration_best_move = None;
             let mut iteration_best_score = i32::MIN + 1;
@@ -93,6 +84,11 @@ impl Searcher {
                     iteration_best_score = score;
                     iteration_best_move = Some(mv);
                 }
+
+                let elapsed = start_time.elapsed();
+                if elapsed > std::time::Duration::from_millis(time_limit) {
+                    break 'outer;
+                }
             }
 
             // 2️⃣ Update global best from this iteration
@@ -103,13 +99,6 @@ impl Searcher {
 
             // 3️⃣ Extract PV from TT for reporting
             //let pv = extract_pv(board, tt);
-
-            // 4️⃣ Optionally: send info (depth, score, nodes, pv) to UI
-
-            // Stop early if the stop flag triggered
-            // if stop_flag.load(Ordering::Relaxed) {
-            //     break;
-            // }
 
             self.info_tx
                 .send(SearchInfo::Info {
@@ -125,6 +114,13 @@ impl Searcher {
             if elapsed > std::time::Duration::from_millis(time_limit / 2) {
                 break;
             }
+
+            // Check for external interrupts
+            match self.cmd_rx.try_recv() {
+                Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break,
+                Ok(SearchCommand::Quit) => return,
+                _ => (),
+            };
         }
 
         let best_move = best_move.expect("No legal moves found");
