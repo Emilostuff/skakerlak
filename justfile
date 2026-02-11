@@ -10,3 +10,6 @@ watch:
 
 test arg="":
     cargo nextest run -r {{ arg }}
+
+run-raw:
+    cargo r -r --bin skakarlak

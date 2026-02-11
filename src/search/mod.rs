@@ -110,7 +110,7 @@ impl Searcher {
 
                 // Check for external interrupts
                 match self.cmd_rx.try_recv() {
-                    Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break,
+                    Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
                     Ok(SearchCommand::Quit) => return,
                     _ => (),
                 };
@@ -134,7 +134,7 @@ impl Searcher {
             );
 
             // Construct pv
-            let pv = self.tt.pv(position.clone(), hash);
+            let pv = self.tt.pv(position.clone(), hash, depth);
 
             // Send info from iteration
             self.send_info(depth, pv, best_score, nodes);

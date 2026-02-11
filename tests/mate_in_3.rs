@@ -16,6 +16,7 @@ fn find_mate(pos: Chess, in_n_moves: u8) -> Vec<Move> {
     let pv = tt.pv(
         pos.clone(),
         pos.zobrist_hash::<Zobrist64>(EnPassantMode::Legal),
+        ply as u8,
     );
 
     assert_eq!(score, i32::MAX - ply as i32);
