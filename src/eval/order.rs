@@ -1,36 +1,37 @@
 use shakmaty::{Move, MoveList};
 
 /// Sorts a list of moves in order of how promising they are.
-pub fn order(mut moves: MoveList) -> MoveList {
-    moves[1..].sort_by_key(|mv| -match mv {
+/// Start index allows for exluding a prefix of the list.
+pub fn order(mut moves: MoveList, start_index: usize) -> MoveList {
+    moves[start_index..].sort_by_key(|mv| match mv {
         // Capture AND promote
         Move::Normal {
             capture: Some(_),
             promotion: Some(_),
             ..
-        } => 10,
+        } => 0,
 
         // Promote
         Move::Normal {
             promotion: Some(_), ..
-        } => 7,
+        } => 1,
 
         // En passant
-        Move::EnPassant { .. } => 6,
+        Move::EnPassant { .. } => 2,
 
         // Capture
         Move::Normal {
             capture: Some(_), ..
-        } => 5,
+        } => 3,
 
         // Castling
-        Move::Castle { .. } => 3,
+        Move::Castle { .. } => 4,
 
         // Regular move
-        Move::Normal { .. } => 2,
+        Move::Normal { .. } => 5,
 
         // Not applicable in regular chess
-        Move::Put { .. } => 0,
+        Move::Put { .. } => 6,
     });
     moves
 }

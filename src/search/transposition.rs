@@ -1,4 +1,7 @@
-use shakmaty::{zobrist::Zobrist64, Move};
+use shakmaty::{
+    zobrist::{Zobrist64, ZobristHash},
+    Chess, EnPassantMode, Move, Position,
+};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug)]
@@ -17,7 +20,7 @@ pub struct TTEntry {
 }
 
 pub struct TranspositionTable {
-    table: HashMap<Zobrist64, TTEntry>, // simple first implementation
+    table: HashMap<Zobrist64, TTEntry>,
     max_size: usize,
 }
 
@@ -41,5 +44,24 @@ impl TranspositionTable {
             self.table.remove(&first_key);
         }
         self.table.insert(key, entry);
+    }
+
+    pub fn best_move(&self, hash: Zobrist64) -> Option<Move> {
+        self.table
+            .get(&hash)
+            .and_then(|entry| entry.best_move.clone())
+    }
+
+    pub fn pv(&self, mut position: Chess, hash: Zobrist64) -> Vec<Move> {
+        let mut pv = Vec::new();
+        let mut current_hash = hash;
+
+        while let Some(mv) = self.best_move(current_hash) {
+            position.play_unchecked(&mv);
+            pv.push(mv);
+            current_hash = position.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
+        }
+
+        pv
     }
 }

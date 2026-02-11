@@ -5,6 +5,7 @@ use shakmaty::{CastlingMode, Chess, Position};
 use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciMove, UciSearchControl};
 use std::{fs::OpenOptions, io::Write};
 
+/// Handles incoming commands, sends outgoing messages and produces runtime logs.
 pub struct Controller {
     input_rx: Receiver<UciMessage>,
     cmd_tx: Sender<SearchCommand>,
@@ -35,6 +36,7 @@ impl Controller {
         controller
     }
 
+    /// Runs the controller.
     pub fn run(mut self) {
         loop {
             select! {
@@ -110,6 +112,7 @@ impl Controller {
                 })
                 .unwrap(),
             UciMessage::Stop => self.cmd_tx.send(SearchCommand::Stop).unwrap(),
+
             _ => (), // Other commands are not handled here.
         }
         false
@@ -131,9 +134,7 @@ impl Controller {
                     depth: Some(depth),
                     score: Some(UciInfoScore {
                         cp: Some(score),
-                        mate: None,
-                        lower_bound: false,
-                        upper_bound: false,
+                        ..Default::default()
                     }),
                     pv: pv
                         .into_iter()

@@ -17,6 +17,7 @@ pub fn negamax(
     beta: i32,
     ply: u8,
     tt: &mut TranspositionTable,
+    nodes: &mut u64,
 ) -> i32 {
     // hash board state
     let hash = board.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
@@ -33,6 +34,9 @@ pub fn negamax(
         }
     }
 
+    // Increment nodes count
+    *nodes += 1;
+
     // 2️⃣ Terminal node
     if depth == 0 || board.is_game_over() {
         return quiescence(board, alpha, beta, ply);
@@ -43,24 +47,25 @@ pub fn negamax(
     let mut alpha = alpha;
     let alpha_orig = alpha;
 
-    // 3️⃣ Generate legal moves
     let mut moves = board.legal_moves();
 
-    // 4️⃣ Move ordering: TT best move first
-    if let Some(tt_entry) = tt.lookup(hash) {
-        if let Some(tt_best_move) = &tt_entry.best_move {
-            if let Some(i) = moves.iter().position(|m| m == tt_best_move) {
-                moves.swap(0, i);
-            }
+    // Fetch best move from TT if present
+    let hash = board.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
+    let mut order_start_index = 0;
+    if let Some(tt_best_move) = tt.best_move(hash) {
+        if let Some(i) = moves.iter().position(|m| m == &tt_best_move) {
+            moves.swap(0, i);
+            order_start_index = 1;
         }
     }
 
-    moves = order::order(moves);
+    // Sort moves
+    moves = order::order(moves, order_start_index);
 
     for mv in moves {
         let mut new_pos = board.clone();
         new_pos.play_unchecked(&mv);
-        let score = -negamax(&mut new_pos, depth - 1, -beta, -alpha, ply + 1, tt);
+        let score = -negamax(&mut new_pos, depth - 1, -beta, -alpha, ply + 1, tt, nodes);
 
         if score > best_score {
             best_score = score;
@@ -73,7 +78,7 @@ pub fn negamax(
         }
     }
 
-    // 8️⃣ Store TT entry
+    // Store TT entry
     let bound = if best_score <= alpha_orig {
         Bound::Upper
     } else if best_score >= beta {
