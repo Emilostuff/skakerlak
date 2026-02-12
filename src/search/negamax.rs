@@ -22,7 +22,7 @@ pub fn negamax(
     // hash board state
     let hash = board.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
 
-    // 1️⃣ Check for TT hit
+    // Check for TT hit
     if let Some(entry) = tt.lookup(hash) {
         if entry.depth >= depth {
             match entry.bound {
@@ -37,7 +37,7 @@ pub fn negamax(
     // Increment nodes count
     *nodes += 1;
 
-    // 2️⃣ Terminal node
+    // Terminal node
     if depth == 0 || board.is_game_over() {
         return quiescence(board, alpha, beta, ply);
     }
