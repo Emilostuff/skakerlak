@@ -30,10 +30,10 @@ impl Searcher {
     /// Run the searcher
     pub fn run(mut self) {
         loop {
-            match self.cmd_rx.recv().unwrap() {
-                SearchCommand::Start { position, control } => self.search(position, control),
-                SearchCommand::Stop => (),
-                SearchCommand::Quit => break,
+            match self.cmd_rx.recv() {
+                Ok(SearchCommand::Start { position, control }) => self.search(position, control),
+                Ok(SearchCommand::Stop) => (),
+                Ok(SearchCommand::Quit) | Err(_) => break,
             }
         }
     }
@@ -152,5 +152,9 @@ impl Searcher {
                 nodes,
             })
             .unwrap();
+    }
+
+    pub fn reset(&mut self) {
+        self.tt = TranspositionTable::new(100_000_000);
     }
 }
