@@ -65,12 +65,12 @@ impl Controller {
             // Uci handshake
             UciMessage::Uci => {
                 self.send(UciMessage::Id {
-                    name: Some(format!("Skakarlak {}", env!("CARGO_PKG_VERSION"))),
+                    name: Some(format!("{}", env!("CARGO_PKG_NAME"),)),
                     author: None,
                 });
                 self.send(UciMessage::Id {
                     name: None,
-                    author: Some("Emil Skydsgaard".into()),
+                    author: Some(env!("CARGO_PKG_AUTHORS").into()),
                 });
                 self.send(UciMessage::UciOk);
             }
