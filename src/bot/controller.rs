@@ -80,7 +80,6 @@ impl Controller {
             }
             UciMessage::Position { fen, moves, .. } => {
                 let mut position = if let Some(fen) = fen {
-                    println!("Received FEN: {}", fen);
                     fen.into_position(CastlingMode::Standard).unwrap()
                 } else {
                     Chess::default()

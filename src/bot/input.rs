@@ -25,12 +25,8 @@ impl InputListener {
             }
 
             // Try to parse as UciMessage. Ignore invalid input.
-            // if let Ok(msg) = trimmed.parse::<UciMessage>() {
-            //     self.input_tx.send(msg).unwrap();
-            // }
-            match trimmed.parse::<UciMessage>() {
-                Ok(msg) => self.input_tx.send(msg).unwrap(),
-                Err(e) => println!("Invalid input: {}", e),
+            if let Ok(msg) = trimmed.parse::<UciMessage>() {
+                self.input_tx.send(msg).unwrap();
             }
         }
     }
