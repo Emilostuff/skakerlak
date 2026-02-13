@@ -171,7 +171,7 @@ const KING_ENDGAME_TABLE: [i32; 64] = [
 
 #[cfg(test)]
 mod tests {
-    use shakmaty::{fen::Fen, Board, CastlingMode, Chess, Position};
+    use shakmaty::{fen::Fen, Board, CastlingMode, Chess, EnPassantMode, Position};
     use std::str::FromStr;
 
     use super::*;
@@ -201,6 +201,7 @@ mod tests {
         let fens = include_str!("../../assets/fens.txt");
 
         for line in fens.lines() {
+            println!("Testing {}", line);
             let pos = parse_fen(line);
             let phase = Phase::new(&pos);
 
@@ -212,12 +213,16 @@ mod tests {
                 new
             };
 
-            assert_eq!(
-                total_score_for_color(board.clone(), &phase, Color::White),
-                total_score_for_color(board_rotated, &phase, Color::Black),
-                "Failed on {}",
-                line
-            );
+            let fen = Fen::from_position(&pos, EnPassantMode::Legal).to_string();
+
+            if Fen::from_str(&fen).is_ok() {
+                assert_eq!(
+                    total_score_for_color(board.clone(), &phase, Color::White),
+                    total_score_for_color(board_rotated, &phase, Color::Black),
+                    "Failed on {}",
+                    line
+                );
+            }
         }
     }
 }

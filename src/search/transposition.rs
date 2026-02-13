@@ -1,7 +1,4 @@
-use shakmaty::{
-    zobrist::{Zobrist64, ZobristHash},
-    Chess, EnPassantMode, Move, Position,
-};
+use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
 use std::collections::HashMap;
 
 #[derive(Copy, Clone, Debug)]
@@ -58,7 +55,7 @@ impl TranspositionTable {
         let mut current_hash = hash;
 
         while let Some(mv) = self.best_move(current_hash) {
-            position.play_unchecked(&mv);
+            position.play_unchecked(mv.clone());
             pv.push(mv);
             current_hash = position.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
             depth -= 1;

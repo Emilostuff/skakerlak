@@ -9,10 +9,7 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use negamax::negamax;
-use shakmaty::{
-    zobrist::{Zobrist64, ZobristHash},
-    Chess, EnPassantMode, Move, Position,
-};
+use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
 
 /// Executes search tasks.
 pub struct Searcher {
@@ -83,7 +80,8 @@ impl Searcher {
             for mv in moves {
                 // Get resulting position after move
                 let mut new_pos = position.clone();
-                new_pos.play_unchecked(&mv);
+                new_pos.play_unchecked(mv.clone());
+                let hash = new_pos.zobrist_hash(EnPassantMode::Legal);
 
                 // Search from here
                 let score = -negamax(
@@ -94,6 +92,7 @@ impl Searcher {
                     1,
                     &mut self.tt,
                     &mut nodes,
+                    hash,
                 );
 
                 // Update results if score has improved

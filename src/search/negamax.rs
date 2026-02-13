@@ -5,10 +5,7 @@ use crate::{
         transposition::{Bound, TTEntry, TranspositionTable},
     },
 };
-use shakmaty::{
-    zobrist::{Zobrist64, ZobristHash},
-    Chess, EnPassantMode, Position,
-};
+use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Position};
 
 pub fn negamax(
     board: &Chess,
@@ -18,10 +15,8 @@ pub fn negamax(
     ply: u8,
     tt: &mut TranspositionTable,
     nodes: &mut u64,
+    hash: Zobrist64,
 ) -> i32 {
-    // hash board state
-    let hash = board.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
-
     // Check for TT hit
     if let Some(entry) = tt.lookup(hash) {
         if entry.depth >= depth {
@@ -50,7 +45,6 @@ pub fn negamax(
     let mut moves = board.legal_moves();
 
     // Fetch best move from TT if present
-    let hash = board.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
     let mut order_start_index = 0;
     if let Some(tt_best_move) = tt.best_move(hash) {
         if let Some(i) = moves.iter().position(|m| m == &tt_best_move) {
@@ -64,8 +58,22 @@ pub fn negamax(
 
     for mv in moves {
         let mut new_pos = board.clone();
-        new_pos.play_unchecked(&mv);
-        let score = -negamax(&mut new_pos, depth - 1, -beta, -alpha, ply + 1, tt, nodes);
+        new_pos.play_unchecked(mv.clone());
+        let new_hash =
+            match board.update_zobrist_hash::<Zobrist64>(hash, mv.clone(), EnPassantMode::Legal) {
+                Some(h) => h,
+                None => new_pos.zobrist_hash::<Zobrist64>(EnPassantMode::Legal),
+            };
+        let score = -negamax(
+            &mut new_pos,
+            depth - 1,
+            -beta,
+            -alpha,
+            ply + 1,
+            tt,
+            nodes,
+            new_hash,
+        );
 
         if score > best_score {
             best_score = score;

@@ -80,14 +80,15 @@ impl Controller {
             }
             UciMessage::Position { fen, moves, .. } => {
                 let mut position = if let Some(fen) = fen {
+                    println!("Received FEN: {}", fen);
                     fen.into_position(CastlingMode::Standard).unwrap()
                 } else {
                     Chess::default()
                 };
 
                 for mv in moves {
-                    let m = mv.to_move(&mut position).unwrap();
-                    position = position.play(&m).unwrap();
+                    let m = mv.to_move(&position).unwrap();
+                    position = position.play(m).unwrap();
                 }
                 self.position = position;
             }
@@ -121,7 +122,7 @@ impl Controller {
     fn handle_info(&mut self, message: SearchInfo) {
         match message {
             SearchInfo::BestMove(mv) => self.send(UciMessage::BestMove {
-                best_move: UciMove::from_move(&mv, CastlingMode::Standard),
+                best_move: UciMove::from_move(mv, CastlingMode::Standard),
                 ponder: None,
             }),
             SearchInfo::Info {
@@ -138,7 +139,7 @@ impl Controller {
                     }),
                     pv: pv
                         .into_iter()
-                        .map(|mv| UciMove::from_move(&mv, CastlingMode::Standard))
+                        .map(|mv| UciMove::from_move(mv, CastlingMode::Standard))
                         .collect(),
                     nodes: Some(nodes),
 
