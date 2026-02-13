@@ -53,31 +53,35 @@ impl Controller {
         }
     }
 
+    /// Sends an outbound message
     fn send(&self, msg: UciMessage) {
         println!("{msg}");
         self.log(&format!("OUT: '{}'", msg));
     }
 
-    fn send_init_response(&self) {
-        self.send(UciMessage::Id {
-            name: Some(format!("Skakarlak {}", env!("CARGO_PKG_VERSION"))),
-            author: None,
-        });
-        self.send(UciMessage::Id {
-            name: None,
-            author: Some("Emil Skydsgaard".into()),
-        });
-        self.send(UciMessage::UciOk);
-    }
-
+    /// Handles incoming commands from user interface
     fn handle_input(&mut self, message: UciMessage) -> bool {
         match message {
-            UciMessage::Quit => return true,
-            UciMessage::Uci => self.send_init_response(),
+            // Uci handshake
+            UciMessage::Uci => {
+                self.send(UciMessage::Id {
+                    name: Some(format!("Skakarlak {}", env!("CARGO_PKG_VERSION"))),
+                    author: None,
+                });
+                self.send(UciMessage::Id {
+                    name: None,
+                    author: Some("Emil Skydsgaard".into()),
+                });
+                self.send(UciMessage::UciOk);
+            }
             UciMessage::IsReady => self.send(UciMessage::ReadyOk),
+
+            // Reset
             UciMessage::UciNewGame => {
                 self.position = Chess::default();
             }
+
+            // Set a position
             UciMessage::Position { fen, moves, .. } => {
                 let mut position = if let Some(fen) = fen {
                     fen.into_position(CastlingMode::Standard).unwrap()
@@ -91,6 +95,8 @@ impl Controller {
                 }
                 self.position = position;
             }
+
+            // Search to fixed depth
             UciMessage::Go {
                 search_control:
                     Some(UciSearchControl {
@@ -104,6 +110,8 @@ impl Controller {
                     control: SearchControl::ToDepth(depth),
                 })
                 .unwrap(),
+
+            // Any other search command will search for approx. 2 seconds
             UciMessage::Go { .. } => self
                 .cmd_tx
                 .send(SearchCommand::Start {
@@ -111,7 +119,12 @@ impl Controller {
                     control: SearchControl::TimeLimit(2000),
                 })
                 .unwrap(),
+
+            // Stop current search
             UciMessage::Stop => self.cmd_tx.send(SearchCommand::Stop).unwrap(),
+
+            // Terminate bot
+            UciMessage::Quit => return true,
 
             _ => (), // Other commands are not handled here.
         }
@@ -120,10 +133,13 @@ impl Controller {
 
     fn handle_info(&mut self, message: SearchInfo) {
         match message {
+            // Emit best move to user interface
             SearchInfo::BestMove(mv) => self.send(UciMessage::BestMove {
                 best_move: UciMove::from_move(mv, CastlingMode::Standard),
                 ponder: None,
             }),
+
+            // Emit info to user interface
             SearchInfo::Info {
                 depth,
                 pv,
