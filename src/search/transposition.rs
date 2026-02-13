@@ -49,19 +49,24 @@ impl TranspositionTable {
             .and_then(|entry| entry.best_move.clone())
     }
 
-    pub fn pv(&self, mut position: Chess, hash: Zobrist64, max_depth: u8) -> Vec<Move> {
+    pub fn pv(&self, mut pos: Chess, mut best_move: Option<Move>, mut depth: u8) -> Vec<Move> {
         let mut pv = Vec::new();
-        let mut depth = max_depth;
-        let mut current_hash = hash;
 
-        while let Some(mv) = self.best_move(current_hash) {
-            position.play_unchecked(mv.clone());
-            pv.push(mv);
-            current_hash = position.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
+        while let Some(mv) = best_move {
+            // Add move to pv
+            pv.push(mv.clone());
+
+            // Update position by playing move
+            pos.play_unchecked(mv);
             depth -= 1;
+
+            // Stop if depth has been reached
             if depth == 0 {
                 break;
             }
+
+            // Find best move at new position
+            best_move = self.best_move(pos.zobrist_hash::<Zobrist64>(EnPassantMode::Legal));
         }
 
         pv

@@ -133,7 +133,7 @@ impl Searcher {
             );
 
             // Construct pv
-            let pv = self.tt.pv(position.clone(), hash, depth);
+            let pv = self.tt.pv(position.clone(), Some(best_move.clone()), depth);
 
             // Send info from iteration
             self.send_info(depth, pv, best_score, nodes);

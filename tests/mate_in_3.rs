@@ -19,7 +19,7 @@ fn find_mate(pos: Chess, in_n_moves: u8) -> Vec<Move> {
         hash,
     );
 
-    let pv = tt.pv(pos.clone(), hash, ply as u8);
+    let pv = tt.pv(pos.clone(), tt.best_move(hash), ply as u8);
 
     assert_eq!(score, i32::MAX - ply as i32);
     assert_eq!(pv.len(), ply as usize);
