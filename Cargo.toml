@@ -7,6 +7,7 @@ authors = ["Emil Skydsgaard <emilskydsgaard@gmail.com>"]
 [dependencies]
 chrono = "0.4.42"
 crossbeam-channel = "0.5.15"
+portable-atomic = "1.13.1"
 shakmaty = "0.30.0"
 shakmaty-uci = { version = "0.1.2" , git = "https://gitlab.com/Emilostuff/shakmaty-uci"}
 

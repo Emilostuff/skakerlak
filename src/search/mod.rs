@@ -89,7 +89,7 @@ impl Searcher {
                     &new_pos,
                     depth - 1,
                     i32::MIN + 1,
-                    i32::MAX,
+                    -iteration_best_score, //i32::MAX,
                     1,
                     &mut self.tt,
                     &mut nodes,
