@@ -3,6 +3,11 @@ pub mod pack;
 pub mod quiescence;
 pub mod transposition;
 
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
+
 use crate::{
     eval::order,
     search::transposition::{Bound, FastTranspositionTable, TranspositionTable},
@@ -10,6 +15,7 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use negamax::negamax;
+use rayon::prelude::*;
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
 
 /// Executes search tasks.
@@ -17,6 +23,12 @@ pub struct Searcher {
     cmd_rx: Receiver<SearchCommand>,
     info_tx: Sender<SearchInfo>,
     tt: FastTranspositionTable,
+}
+
+#[derive(Clone)]
+pub struct Best {
+    pub move_: Move,
+    pub score: i32,
 }
 
 impl Searcher {
@@ -41,12 +53,14 @@ impl Searcher {
 
     fn search(&mut self, position: Chess, control: SearchControl) {
         let start_time = std::time::Instant::now();
-        let mut best_move = position
-            .legal_moves()
-            .first()
-            .expect("No legal moves found")
-            .clone();
-        let mut best_score = i32::MIN + 1;
+        let mut best = Best {
+            move_: position
+                .legal_moves()
+                .first()
+                .expect("No legal moves found")
+                .clone(),
+            score: i32::MIN + 1,
+        };
 
         // Determine search constraints
         let (max_depth, time_limit) = match control {
@@ -59,9 +73,11 @@ impl Searcher {
 
         // Iterative deepening loop
         'outer: for depth in 1..=max_depth {
-            let mut iteration_best_move = None;
-            let mut iteration_best_score = i32::MIN + 1;
-            let mut nodes = 0;
+            let iteration_best = Arc::new(Mutex::new(Best {
+                move_: best.move_.clone(),
+                score: i32::MIN + 1,
+            }));
+            let nodes = Arc::new(AtomicU64::new(0));
 
             // Generate moves from position
             let mut moves = position.legal_moves();
@@ -78,11 +94,15 @@ impl Searcher {
             // Sort moves
             moves = order::order(moves, order_start_index);
 
-            for mv in moves {
+            moves.into_par_iter().for_each(|mv: &Move| {
+                let mut local_nodes = 0;
+
                 // Get resulting position after move
                 let mut new_pos = position.clone();
                 new_pos.play_unchecked(mv.clone());
                 let hash = new_pos.zobrist_hash(EnPassantMode::Legal);
+
+                let iteration_best_score = iteration_best.lock().unwrap().score;
 
                 // Search from here
                 let score = -negamax(
@@ -91,55 +111,58 @@ impl Searcher {
                     i32::MIN + 1,
                     -iteration_best_score, //i32::MAX,
                     1,
-                    &mut self.tt,
-                    &mut nodes,
+                    &self.tt,
+                    &mut local_nodes,
                     hash,
                 );
 
+                nodes.fetch_add(local_nodes, Ordering::Relaxed);
+
                 // Update results if score has improved
-                if score > iteration_best_score {
-                    iteration_best_score = score;
-                    iteration_best_move = Some(mv);
+                if score > iteration_best.lock().unwrap().score {
+                    *iteration_best.lock().unwrap() = Best {
+                        score,
+                        move_: mv.clone(),
+                    };
                 }
-
-                // Check if allowed time has run out
-                let elapsed = start_time.elapsed();
-                if elapsed > std::time::Duration::from_millis(time_limit) {
-                    break 'outer;
-                }
-
-                // Check for external interrupts
-                match self.cmd_rx.try_recv() {
-                    Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
-                    Ok(SearchCommand::Quit) => return,
-                    _ => (),
-                };
-            }
+            });
 
             // Update global best from iteration
-            if let Some(iter_move) = iteration_best_move {
-                best_move = iter_move;
-                best_score = iteration_best_score;
-            }
+            best = (*iteration_best.lock().unwrap()).clone();
 
             // Store result in tt
             self.tt.store(
                 hash,
-                best_score,
+                best.score,
                 depth,
                 Bound::Exact,
-                best_move.clone(), // best move found at this node
+                best.move_.clone(), // best move found at this node
             );
 
             // Construct pv
-            let pv = self.tt.pv(position.clone(), Some(best_move.clone()), depth);
+            let pv = self
+                .tt
+                .pv(position.clone(), Some(best.move_.clone()), depth);
 
             // Send info from iteration
-            self.send_info(depth, pv, best_score, nodes);
+            self.send_info(depth, pv, best.score, nodes.load(Ordering::Relaxed));
+
+            // Check if allowed time has run out
+            let elapsed = start_time.elapsed();
+            if elapsed > std::time::Duration::from_millis(time_limit) {
+                break 'outer;
+            }
+
+            // Check for external interrupts
+            match self.cmd_rx.try_recv() {
+                Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
+                Ok(SearchCommand::Quit) => return,
+                _ => (),
+            };
         }
 
         // Output best move
-        self.info_tx.send(SearchInfo::BestMove(best_move)).unwrap();
+        self.info_tx.send(SearchInfo::BestMove(best.move_)).unwrap();
     }
 
     fn send_info(&self, depth: u8, pv: Vec<Move>, score: i32, nodes: u64) {

@@ -727,6 +727,7 @@ dependencies = [
  "crossbeam-channel",
  "portable-atomic",
  "rand",
+ "rayon",
  "shakmaty",
  "shakmaty-uci",
 ]
