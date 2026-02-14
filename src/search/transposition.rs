@@ -1,7 +1,7 @@
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
 use std::collections::HashMap;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Bound {
     Exact,
     Lower,

@@ -1,4 +1,5 @@
 pub mod negamax;
+pub mod pack;
 pub mod quiescence;
 pub mod transposition;
 
