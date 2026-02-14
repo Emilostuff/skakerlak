@@ -61,10 +61,7 @@ impl TranspositionTable for FastTranspositionTable {
     fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move) {
         let index = self.index(key);
         let entry = self.table[index];
-
-        if get_depth(entry) < depth {
-            self.table[index] = pack(key, best_move, score, depth, bound)
-        }
+        self.table[index] = pack(key, best_move, score, depth, bound)
     }
 
     fn best_move(&self, key: Zobrist64) -> Option<Move> {

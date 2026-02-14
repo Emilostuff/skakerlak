@@ -24,7 +24,7 @@ impl Searcher {
         Searcher {
             cmd_rx,
             info_tx,
-            tt: FastTranspositionTable::new(25),
+            tt: FastTranspositionTable::new(28),
         }
     }
 
@@ -154,6 +154,6 @@ impl Searcher {
     }
 
     pub fn reset(&mut self) {
-        self.tt = FastTranspositionTable::new(25);
+        self.tt = FastTranspositionTable::new(28);
     }
 }

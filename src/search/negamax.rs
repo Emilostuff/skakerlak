@@ -20,14 +20,13 @@ pub fn negamax(
     // Check for TT hit
     let mut tt_best_move = None;
     if let Some(entry) = tt.lookup(hash) {
+        tt_best_move = Some(entry.best_move);
         if entry.depth >= depth {
             match entry.bound {
                 Bound::Exact => return entry.score,
                 Bound::Lower if entry.score >= beta => return entry.score,
                 Bound::Upper if entry.score <= alpha => return entry.score,
-                _ => {
-                    tt_best_move = Some(entry.best_move);
-                }
+                _ => {}
             }
         }
     }
