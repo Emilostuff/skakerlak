@@ -38,12 +38,14 @@ impl FastTranspositionTable {
         }
     }
 
+    #[inline(always)]
     fn index(&self, key: Zobrist64) -> usize {
         (key.0 >> (64 - self.size_power)) as usize
     }
 }
 
 impl TranspositionTable for FastTranspositionTable {
+    #[inline(always)]
     fn lookup(&self, key: Zobrist64) -> Option<TTEntry> {
         let index = self.index(key);
         let entry = self.table[index];
@@ -58,12 +60,13 @@ impl TranspositionTable for FastTranspositionTable {
         None
     }
 
+    #[inline(always)]
     fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move) {
         let index = self.index(key);
-        let entry = self.table[index];
         self.table[index] = pack(key, best_move, score, depth, bound)
     }
 
+    #[inline(always)]
     fn best_move(&self, key: Zobrist64) -> Option<Move> {
         let index = self.index(key);
         let entry = self.table[index];
@@ -73,6 +76,7 @@ impl TranspositionTable for FastTranspositionTable {
         None
     }
 
+    #[inline(always)]
     fn pv(&self, mut pos: Chess, mut best_move: Option<Move>, mut depth: u8) -> Vec<Move> {
         let mut pv = Vec::new();
 

@@ -13,6 +13,7 @@ const BOUND_OFFSET: u8 = 30;
 /// | Zobrist upper 48 bits | depth 8 bits | score 32 bits |
 pub type PackedRep = u128;
 
+#[inline(always)]
 pub fn pack(zobrist: Zobrist64, mv: Move, score: i32, depth: u8, bound: Bound) -> PackedRep {
     let mut entry = 0;
 
@@ -134,7 +135,7 @@ fn set_move(entry: &mut PackedRep, mv: Move) {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn get_move(entry: PackedRep) -> Move {
     let tp = (entry >> MOVE_TYPE_OFFSET) & 0b11;
     let role = (entry >> ROLE_OFFSET) & 0b111;
@@ -167,6 +168,7 @@ pub fn get_move(entry: PackedRep) -> Move {
     }
 }
 
+#[inline(always)]
 fn get_role(input: u128) -> Role {
     match input {
         1 => Role::Pawn,
@@ -179,6 +181,7 @@ fn get_role(input: u128) -> Role {
     }
 }
 
+#[inline(always)]
 fn get_square(input: u128) -> Square {
     match input {
         i @ 0..64 => unsafe { std::mem::transmute(i as u8) },
@@ -186,6 +189,7 @@ fn get_square(input: u128) -> Square {
     }
 }
 
+#[inline(always)]
 fn get_option_role(input: u128) -> Option<Role> {
     match input {
         0 => None,
