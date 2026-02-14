@@ -2,7 +2,7 @@ use crate::{
     eval::order,
     search::{
         quiescence::quiescence,
-        transposition::{Bound, TTEntry, TranspositionTable},
+        transposition::{Bound, TranspositionTable},
     },
 };
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Position};
@@ -95,15 +95,7 @@ pub fn negamax(
         Bound::Exact
     };
 
-    tt.store(
-        hash,
-        TTEntry {
-            score: best_score,
-            depth,
-            bound,
-            best_move, // best move found at this node
-        },
-    );
+    tt.store(hash, best_score, depth, bound, best_move);
 
     best_score
 }

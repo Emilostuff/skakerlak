@@ -4,7 +4,7 @@ pub mod transposition;
 
 use crate::{
     eval::order,
-    search::transposition::{Bound, TTEntry, TranspositionTable},
+    search::transposition::{Bound, TranspositionTable},
     SearchCommand, SearchControl, SearchInfo,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -124,12 +124,10 @@ impl Searcher {
             // Store result in tt
             self.tt.store(
                 hash,
-                TTEntry {
-                    score: best_score,
-                    depth,
-                    bound: Bound::Exact,
-                    best_move: Some(best_move.clone()), // best move found at this node
-                },
+                best_score,
+                depth,
+                Bound::Exact,
+                Some(best_move.clone()), // best move found at this node
             );
 
             // Construct pv

@@ -33,14 +33,29 @@ impl TranspositionTable {
         self.table.get(&key)
     }
 
-    pub fn store(&mut self, key: Zobrist64, entry: TTEntry) {
+    pub fn store(
+        &mut self,
+        key: Zobrist64,
+        score: i32,
+        depth: u8,
+        bound: Bound,
+        best_move: Option<Move>,
+    ) {
         if self.table.len() >= self.max_size {
             // simple replacement: remove random or first inserted
             // advanced: use depth-prefer replacement
             let first_key = *self.table.keys().next().unwrap();
             self.table.remove(&first_key);
         }
-        self.table.insert(key, entry);
+        self.table.insert(
+            key,
+            TTEntry {
+                score,
+                depth,
+                bound,
+                best_move,
+            },
+        );
     }
 
     pub fn best_move(&self, hash: Zobrist64) -> Option<Move> {
