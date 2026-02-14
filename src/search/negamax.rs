@@ -13,7 +13,7 @@ pub fn negamax(
     alpha: i32,
     beta: i32,
     ply: u8,
-    tt: &FastTranspositionTable,
+    tt: &mut FastTranspositionTable,
     nodes: &mut u64,
     hash: Zobrist64,
 ) -> i32 {

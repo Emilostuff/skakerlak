@@ -1,12 +1,11 @@
-use std::sync::atomic::Ordering;
-
 use crate::search::pack::*;
-use portable_atomic::AtomicU128;
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
+
+use crate::search::pack::PackedRep;
 
 pub trait TranspositionTable {
     fn lookup(&self, key: Zobrist64) -> Option<TTEntry>;
-    fn store(&self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move);
+    fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move);
     fn best_move(&self, key: Zobrist64) -> Option<Move>;
     fn pv(&self, pos: Chess, best_move: Option<Move>, depth: u8) -> Vec<Move>;
 }
@@ -27,18 +26,16 @@ pub struct TTEntry {
 }
 
 pub struct FastTranspositionTable {
-    table: Vec<AtomicU128>,
+    table: Vec<PackedRep>,
     size_power: u8,
 }
 
 impl FastTranspositionTable {
     pub fn new(size_power: u8) -> Self {
-        let table_len = 1 << size_power;
-        let mut table = Vec::with_capacity(table_len);
-        for _ in 0..table_len {
-            table.push(AtomicU128::new(0));
+        Self {
+            table: vec![0; 1 << size_power],
+            size_power,
         }
-        Self { table, size_power }
     }
 
     #[inline(always)]
@@ -51,7 +48,7 @@ impl TranspositionTable for FastTranspositionTable {
     #[inline(always)]
     fn lookup(&self, key: Zobrist64) -> Option<TTEntry> {
         let index = self.index(key);
-        let entry = self.table[index].load(Ordering::Relaxed);
+        let entry = self.table[index];
         if matches_zobrist(entry, key) {
             return Some(TTEntry {
                 score: get_score(entry),
@@ -64,15 +61,15 @@ impl TranspositionTable for FastTranspositionTable {
     }
 
     #[inline(always)]
-    fn store(&self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move) {
+    fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move) {
         let index = self.index(key);
-        self.table[index].store(pack(key, best_move, score, depth, bound), Ordering::Relaxed);
+        self.table[index] = pack(key, best_move, score, depth, bound)
     }
 
     #[inline(always)]
     fn best_move(&self, key: Zobrist64) -> Option<Move> {
         let index = self.index(key);
-        let entry = self.table[index].load(Ordering::Relaxed);
+        let entry = self.table[index];
         if matches_zobrist(entry, key) {
             return Some(get_move(entry));
         }

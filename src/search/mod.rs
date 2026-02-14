@@ -3,11 +3,6 @@ pub mod pack;
 pub mod quiescence;
 pub mod transposition;
 
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc, Mutex,
-};
-
 use crate::{
     eval::order,
     search::transposition::{Bound, FastTranspositionTable, TranspositionTable},
@@ -15,7 +10,6 @@ use crate::{
 };
 use crossbeam_channel::{Receiver, Sender};
 use negamax::negamax;
-use rayon::prelude::*;
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
 
 /// Executes search tasks.
@@ -73,11 +67,12 @@ impl Searcher {
 
         // Iterative deepening loop
         'outer: for depth in 1..=max_depth {
-            let iteration_best = Arc::new(Mutex::new(Best {
+            let mut iteration_best = Best {
                 move_: best.move_.clone(),
                 score: i32::MIN + 1,
-            }));
-            let nodes = Arc::new(AtomicU64::new(0));
+            };
+
+            let mut nodes = 0;
 
             // Generate moves from position
             let mut moves = position.legal_moves();
@@ -94,41 +89,48 @@ impl Searcher {
             // Sort moves
             moves = order::order(moves, order_start_index);
 
-            moves.into_par_iter().for_each(|mv: &Move| {
-                let mut local_nodes = 0;
-
+            for mv in moves {
                 // Get resulting position after move
                 let mut new_pos = position.clone();
                 new_pos.play_unchecked(mv.clone());
                 let hash = new_pos.zobrist_hash(EnPassantMode::Legal);
-
-                let iteration_best_score = iteration_best.lock().unwrap().score;
 
                 // Search from here
                 let score = -negamax(
                     &new_pos,
                     depth - 1,
                     i32::MIN + 1,
-                    -iteration_best_score, //i32::MAX,
+                    -iteration_best.score,
                     1,
-                    &self.tt,
-                    &mut local_nodes,
+                    &mut self.tt,
+                    &mut nodes,
                     hash,
                 );
 
-                nodes.fetch_add(local_nodes, Ordering::Relaxed);
-
                 // Update results if score has improved
-                if score > iteration_best.lock().unwrap().score {
-                    *iteration_best.lock().unwrap() = Best {
+                if score > iteration_best.score {
+                    iteration_best = Best {
                         score,
                         move_: mv.clone(),
                     };
                 }
-            });
+
+                // Check if allowed time has run out
+                let elapsed = start_time.elapsed();
+                if elapsed > std::time::Duration::from_millis(time_limit) {
+                    break 'outer;
+                }
+
+                // Check for external interrupts
+                match self.cmd_rx.try_recv() {
+                    Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
+                    Ok(SearchCommand::Quit) => return,
+                    _ => (),
+                };
+            }
 
             // Update global best from iteration
-            best = (*iteration_best.lock().unwrap()).clone();
+            best = iteration_best;
 
             // Store result in tt
             self.tt.store(
@@ -145,20 +147,7 @@ impl Searcher {
                 .pv(position.clone(), Some(best.move_.clone()), depth);
 
             // Send info from iteration
-            self.send_info(depth, pv, best.score, nodes.load(Ordering::Relaxed));
-
-            // Check if allowed time has run out
-            let elapsed = start_time.elapsed();
-            if elapsed > std::time::Duration::from_millis(time_limit) {
-                break 'outer;
-            }
-
-            // Check for external interrupts
-            match self.cmd_rx.try_recv() {
-                Ok(SearchCommand::Start { .. }) | Ok(SearchCommand::Stop) => break 'outer,
-                Ok(SearchCommand::Quit) => return,
-                _ => (),
-            };
+            self.send_info(depth, pv, best.score, nodes);
         }
 
         // Output best move
