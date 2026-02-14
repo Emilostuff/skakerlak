@@ -1,5 +1,14 @@
+use crate::search::pack::*;
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
-use std::collections::HashMap;
+
+use crate::search::pack::PackedRep;
+
+pub trait TranspositionTable {
+    fn lookup(&self, key: Zobrist64) -> Option<TTEntry>;
+    fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move);
+    fn best_move(&self, key: Zobrist64) -> Option<Move>;
+    fn pv(&self, pos: Chess, best_move: Option<Move>, depth: u8) -> Vec<Move>;
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Bound {
@@ -13,58 +22,61 @@ pub struct TTEntry {
     pub score: i32,
     pub depth: u8,
     pub bound: Bound,
-    pub best_move: Option<Move>,
+    pub best_move: Move,
 }
 
-pub struct TranspositionTable {
-    table: HashMap<Zobrist64, TTEntry>,
-    max_size: usize,
+pub struct FastTranspositionTable {
+    table: Vec<PackedRep>,
+    size_power: u8,
 }
 
-impl TranspositionTable {
-    pub fn new(max_size: usize) -> Self {
+impl FastTranspositionTable {
+    pub fn new(size_power: u8) -> Self {
         Self {
-            table: HashMap::with_capacity(max_size),
-            max_size,
+            table: vec![0; 1 << size_power],
+            size_power,
         }
     }
 
-    pub fn lookup(&self, key: Zobrist64) -> Option<&TTEntry> {
-        self.table.get(&key)
+    fn index(&self, key: Zobrist64) -> usize {
+        (key.0 >> (64 - self.size_power)) as usize
     }
+}
 
-    pub fn store(
-        &mut self,
-        key: Zobrist64,
-        score: i32,
-        depth: u8,
-        bound: Bound,
-        best_move: Option<Move>,
-    ) {
-        if self.table.len() >= self.max_size {
-            // simple replacement: remove random or first inserted
-            // advanced: use depth-prefer replacement
-            let first_key = *self.table.keys().next().unwrap();
-            self.table.remove(&first_key);
+impl TranspositionTable for FastTranspositionTable {
+    fn lookup(&self, key: Zobrist64) -> Option<TTEntry> {
+        let index = self.index(key);
+        let entry = self.table[index];
+        if matches_zobrist(entry, key) {
+            return Some(TTEntry {
+                score: get_score(entry),
+                depth: get_depth(entry),
+                bound: get_bound(entry),
+                best_move: get_move(entry),
+            });
         }
-        self.table.insert(
-            key,
-            TTEntry {
-                score,
-                depth,
-                bound,
-                best_move,
-            },
-        );
+        None
     }
 
-    pub fn best_move(&self, hash: Zobrist64) -> Option<Move> {
-        self.table
-            .get(&hash)
-            .and_then(|entry| entry.best_move.clone())
+    fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move) {
+        let index = self.index(key);
+        let entry = self.table[index];
+
+        if get_depth(entry) < depth {
+            self.table[index] = pack(key, best_move, score, depth, bound)
+        }
     }
 
-    pub fn pv(&self, mut pos: Chess, mut best_move: Option<Move>, mut depth: u8) -> Vec<Move> {
+    fn best_move(&self, key: Zobrist64) -> Option<Move> {
+        let index = self.index(key);
+        let entry = self.table[index];
+        if matches_zobrist(entry, key) {
+            return Some(get_move(entry));
+        }
+        None
+    }
+
+    fn pv(&self, mut pos: Chess, mut best_move: Option<Move>, mut depth: u8) -> Vec<Move> {
         let mut pv = Vec::new();
 
         while let Some(mv) = best_move {

@@ -11,9 +11,9 @@ const BOUND_OFFSET: u8 = 30;
 
 /// Layout of a TTEntry.
 /// | Zobrist upper 48 bits | depth 8 bits | score 32 bits |
-pub type TTEntry = u128;
+pub type PackedRep = u128;
 
-pub fn pack(zobrist: Zobrist64, mv: Move, score: i32, depth: u8, bound: Bound) -> TTEntry {
+pub fn pack(zobrist: Zobrist64, mv: Move, score: i32, depth: u8, bound: Bound) -> PackedRep {
     let mut entry = 0;
 
     set_zobrist(&mut entry, zobrist);
@@ -26,45 +26,45 @@ pub fn pack(zobrist: Zobrist64, mv: Move, score: i32, depth: u8, bound: Bound) -
 }
 
 #[inline(always)]
-fn set_zobrist(entry: &mut TTEntry, zobrist: Zobrist64) {
-    *entry |= (((zobrist.0 & ZOBRIST_MASK) as u128) << ZOBRIST_OFFSET);
+fn set_zobrist(entry: &mut PackedRep, zobrist: Zobrist64) {
+    *entry |= ((zobrist.0 & ZOBRIST_MASK) as u128) << ZOBRIST_OFFSET;
 }
 
 #[inline(always)]
-pub fn matches_zobrist(entry: TTEntry, zobrist: Zobrist64) -> bool {
+pub fn matches_zobrist(entry: PackedRep, zobrist: Zobrist64) -> bool {
     let a_zobrist = ((entry >> ZOBRIST_OFFSET) as u64) & ZOBRIST_MASK;
     let b_zobrist = zobrist.0 & ZOBRIST_MASK;
     a_zobrist == b_zobrist
 }
 
 #[inline(always)]
-fn set_depth(entry: &mut TTEntry, depth: u8) {
-    *entry |= ((depth as u128) << DEPTH_OFFSET);
+fn set_depth(entry: &mut PackedRep, depth: u8) {
+    *entry |= (depth as u128) << DEPTH_OFFSET;
 }
 
 #[inline(always)]
-fn get_depth(entry: TTEntry) -> u8 {
+pub fn get_depth(entry: PackedRep) -> u8 {
     (entry >> DEPTH_OFFSET) as u8
 }
 
 #[inline(always)]
-fn set_score(entry: &mut TTEntry, score: i32) {
-    *entry |= ((score as u128 & 0xFFFF_FFFF) << SCORE_OFFSET);
+fn set_score(entry: &mut PackedRep, score: i32) {
+    *entry |= (score as u128 & 0xFFFF_FFFF) << SCORE_OFFSET;
 }
 
 #[inline(always)]
-fn get_score(entry: TTEntry) -> i32 {
-    ((entry >> SCORE_OFFSET) as i32)
+pub fn get_score(entry: PackedRep) -> i32 {
+    (entry >> SCORE_OFFSET) as i32
 }
 
 #[inline(always)]
-fn set_bound(entry: &mut TTEntry, bound: Bound) {
-    *entry |= ((bound as u128) << BOUND_OFFSET);
+fn set_bound(entry: &mut PackedRep, bound: Bound) {
+    *entry |= (bound as u128) << BOUND_OFFSET;
 }
 
 #[inline(always)]
-fn get_bound(entry: TTEntry) -> Bound {
-    match ((entry >> BOUND_OFFSET & 0b11) as u8) {
+pub fn get_bound(entry: PackedRep) -> Bound {
+    match (entry >> BOUND_OFFSET & 0b11) as u8 {
         0 => Bound::Exact,
         1 => Bound::Lower,
         2 => Bound::Upper,
@@ -88,7 +88,7 @@ const TO_OFFSET: u8 = PROMOTION_OFFSET + 3;
 const PROMOTION_OFFSET: u8 = 0;
 
 #[inline(always)]
-fn set_move(entry: &mut TTEntry, mv: Move) {
+fn set_move(entry: &mut PackedRep, mv: Move) {
     match mv {
         Move::Normal {
             role,
@@ -106,36 +106,36 @@ fn set_move(entry: &mut TTEntry, mv: Move) {
                 Some(piece) => piece as u128,
                 None => 0,
             };
-            *entry |= (tp << MOVE_TYPE_OFFSET);
-            *entry |= ((role as u128) << ROLE_OFFSET);
-            *entry |= ((from as u128) << FROM_OFFSET);
-            *entry |= ((capture as u128) << CAPTURE_OFFSET);
-            *entry |= ((to as u128) << TO_OFFSET);
-            *entry |= ((promotion as u128) << PROMOTION_OFFSET);
+            *entry |= tp << MOVE_TYPE_OFFSET;
+            *entry |= (role as u128) << ROLE_OFFSET;
+            *entry |= (from as u128) << FROM_OFFSET;
+            *entry |= (capture as u128) << CAPTURE_OFFSET;
+            *entry |= (to as u128) << TO_OFFSET;
+            *entry |= (promotion as u128) << PROMOTION_OFFSET;
         }
         Move::EnPassant { from, to } => {
             let tp = MoveType::EnPassant as u128;
-            *entry |= (tp << MOVE_TYPE_OFFSET);
-            *entry |= ((from as u128) << FROM_OFFSET);
-            *entry |= ((to as u128) << TO_OFFSET);
+            *entry |= tp << MOVE_TYPE_OFFSET;
+            *entry |= (from as u128) << FROM_OFFSET;
+            *entry |= (to as u128) << TO_OFFSET;
         }
         Move::Castle { king, rook } => {
             let tp = MoveType::Castle as u128;
-            *entry |= (tp << MOVE_TYPE_OFFSET);
-            *entry |= ((king as u128) << FROM_OFFSET);
-            *entry |= ((rook as u128) << TO_OFFSET);
+            *entry |= tp << MOVE_TYPE_OFFSET;
+            *entry |= (king as u128) << FROM_OFFSET;
+            *entry |= (rook as u128) << TO_OFFSET;
         }
         Move::Put { role, to } => {
             let tp = MoveType::Put as u128;
-            *entry |= (tp << MOVE_TYPE_OFFSET);
-            *entry |= ((role as u128) << ROLE_OFFSET);
-            *entry |= ((to as u128) << TO_OFFSET);
+            *entry |= tp << MOVE_TYPE_OFFSET;
+            *entry |= (role as u128) << ROLE_OFFSET;
+            *entry |= (to as u128) << TO_OFFSET;
         }
     }
 }
 
 #[inline]
-pub fn get_move(entry: u128) -> Move {
+pub fn get_move(entry: PackedRep) -> Move {
     let tp = (entry >> MOVE_TYPE_OFFSET) & 0b11;
     let role = (entry >> ROLE_OFFSET) & 0b111;
     let from = (entry >> FROM_OFFSET) & 0b111111;
@@ -201,7 +201,7 @@ fn get_option_role(input: u128) -> Option<Role> {
 
 #[cfg(test)]
 mod tests {
-    use shakmaty::{fen::Fen, Board, CastlingMode, Chess, EnPassantMode, Position};
+    use shakmaty::{fen::Fen, CastlingMode, Chess, EnPassantMode, Position};
     use std::str::FromStr;
 
     use super::*;

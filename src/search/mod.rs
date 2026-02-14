@@ -5,7 +5,7 @@ pub mod transposition;
 
 use crate::{
     eval::order,
-    search::transposition::{Bound, TranspositionTable},
+    search::transposition::{Bound, FastTranspositionTable, TranspositionTable},
     SearchCommand, SearchControl, SearchInfo,
 };
 use crossbeam_channel::{Receiver, Sender};
@@ -16,7 +16,7 @@ use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
 pub struct Searcher {
     cmd_rx: Receiver<SearchCommand>,
     info_tx: Sender<SearchInfo>,
-    tt: TranspositionTable,
+    tt: FastTranspositionTable,
 }
 
 impl Searcher {
@@ -24,7 +24,7 @@ impl Searcher {
         Searcher {
             cmd_rx,
             info_tx,
-            tt: TranspositionTable::new(100_000_000),
+            tt: FastTranspositionTable::new(25),
         }
     }
 
@@ -128,7 +128,7 @@ impl Searcher {
                 best_score,
                 depth,
                 Bound::Exact,
-                Some(best_move.clone()), // best move found at this node
+                best_move.clone(), // best move found at this node
             );
 
             // Construct pv
@@ -154,6 +154,6 @@ impl Searcher {
     }
 
     pub fn reset(&mut self) {
-        self.tt = TranspositionTable::new(100_000_000);
+        self.tt = FastTranspositionTable::new(25);
     }
 }

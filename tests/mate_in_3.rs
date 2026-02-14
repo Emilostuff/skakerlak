@@ -1,10 +1,13 @@
 use shakmaty::{fen::Fen, zobrist::Zobrist64, CastlingMode, Chess, EnPassantMode, Move, Position};
-use skakarlak::search::{negamax::negamax, transposition::TranspositionTable};
+use skakarlak::search::{
+    negamax::negamax,
+    transposition::{FastTranspositionTable, TranspositionTable},
+};
 
 use std::str::FromStr;
 
 fn find_mate(pos: Chess, in_n_moves: u8) -> Vec<Move> {
-    let mut tt = TranspositionTable::new(10_000_000);
+    let mut tt = FastTranspositionTable::new(25);
     let ply = in_n_moves * 2 - 1;
     let mut nodes = 0;
     let hash = pos.zobrist_hash::<Zobrist64>(EnPassantMode::Legal);
