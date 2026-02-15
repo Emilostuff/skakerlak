@@ -34,6 +34,9 @@ impl Searcher {
                 Ok(SearchCommand::Start { position, control }) => self.search(position, control),
                 Ok(SearchCommand::Stop) => (),
                 Ok(SearchCommand::Quit) | Err(_) => break,
+                Ok(SearchCommand::Reset) => {
+                    self.tt.clear();
+                }
             }
         }
     }

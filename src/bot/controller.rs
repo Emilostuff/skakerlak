@@ -2,7 +2,7 @@ use crate::{SearchCommand, SearchControl, SearchInfo};
 use chrono::Local;
 use crossbeam_channel::{select, Receiver, Sender};
 use shakmaty::{CastlingMode, Chess, Position};
-use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciMove, UciSearchControl};
+use shakmaty_uci::{UciInfo, UciInfoScore, UciMessage, UciMove, UciSearchControl, UciTimeControl};
 use std::{fs::OpenOptions, io::Write};
 
 /// Handles incoming commands, sends outgoing messages and produces runtime logs.
@@ -108,6 +108,18 @@ impl Controller {
                 .send(SearchCommand::Start {
                     position: self.position.clone(),
                     control: SearchControl::ToDepth(depth),
+                })
+                .unwrap(),
+
+            // seatch with time limit
+            UciMessage::Go {
+                time_control: Some(UciTimeControl::MoveTime(time)),
+                ..
+            } => self
+                .cmd_tx
+                .send(SearchCommand::Start {
+                    position: self.position.clone(),
+                    control: SearchControl::TimeLimit(time.as_millis() as u64),
                 })
                 .unwrap(),
 
