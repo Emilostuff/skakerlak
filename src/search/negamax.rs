@@ -10,7 +10,7 @@ use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Position};
 pub fn negamax(
     board: &Chess,
     depth: u8,
-    alpha: i32,
+    mut alpha: i32,
     beta: i32,
     ply: u8,
     tt: &mut FastTranspositionTable,
@@ -43,7 +43,6 @@ pub fn negamax(
 
     let mut best_score = i32::MIN + 1;
     let mut best_move = moves.first().unwrap().clone();
-    let mut alpha = alpha;
     let alpha_orig = alpha;
 
     // Fetch best move from TT if present
