@@ -5,6 +5,7 @@ pub trait TranspositionTable {
     fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move);
     fn best_move(&self, key: Zobrist64) -> Option<Move>;
     fn pv(&self, pos: Chess, best_move: Option<Move>, depth: u8) -> Vec<Move>;
+    fn clear(&mut self);
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -102,5 +103,9 @@ impl TranspositionTable for FastTranspositionTable {
         }
 
         pv
+    }
+
+    fn clear(&mut self) {
+        self.table = vec![None; 1 << self.size_power]
     }
 }
