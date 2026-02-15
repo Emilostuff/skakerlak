@@ -1,7 +1,4 @@
-use crate::search::pack::*;
 use shakmaty::{zobrist::Zobrist64, Chess, EnPassantMode, Move, Position};
-
-use crate::search::pack::PackedRep;
 
 pub trait TranspositionTable {
     fn lookup(&self, key: Zobrist64) -> Option<TTEntry>;
@@ -26,14 +23,14 @@ pub struct TTEntry {
 }
 
 pub struct FastTranspositionTable {
-    table: Vec<PackedRep>,
+    table: Vec<Option<(Zobrist64, TTEntry)>>,
     size_power: u8,
 }
 
 impl FastTranspositionTable {
     pub fn new(size_power: u8) -> Self {
         Self {
-            table: vec![0; 1 << size_power],
+            table: vec![None; 1 << size_power],
             size_power,
         }
     }
@@ -48,31 +45,38 @@ impl TranspositionTable for FastTranspositionTable {
     #[inline(always)]
     fn lookup(&self, key: Zobrist64) -> Option<TTEntry> {
         let index = self.index(key);
-        let entry = self.table[index];
-        if matches_zobrist(entry, key) {
-            return Some(TTEntry {
-                score: get_score(entry),
-                depth: get_depth(entry),
-                bound: get_bound(entry),
-                best_move: get_move(entry),
-            });
+        if let Some(Some((zobrist, entry))) = self.table.get(index) {
+            if &key == zobrist {
+                return Some(entry.clone());
+            }
         }
+
         None
     }
 
     #[inline(always)]
     fn store(&mut self, key: Zobrist64, score: i32, depth: u8, bound: Bound, best_move: Move) {
         let index = self.index(key);
-        self.table[index] = pack(key, best_move, score, depth, bound)
+        self.table[index] = Some((
+            key,
+            TTEntry {
+                score,
+                depth,
+                bound,
+                best_move,
+            },
+        ));
     }
 
     #[inline(always)]
     fn best_move(&self, key: Zobrist64) -> Option<Move> {
         let index = self.index(key);
-        let entry = self.table[index];
-        if matches_zobrist(entry, key) {
-            return Some(get_move(entry));
+        if let Some(Some((zobrist, entry))) = self.table.get(index) {
+            if &key == zobrist {
+                return Some(entry.best_move);
+            }
         }
+
         None
     }
 
