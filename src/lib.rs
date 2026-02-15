@@ -18,6 +18,7 @@ pub enum SearchCommand {
     },
     Stop,
     Quit,
+    Reset,
 }
 
 /// Search information to be logged
