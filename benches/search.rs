@@ -55,10 +55,10 @@ fn search(time_limit: u64) -> Vec<Measurements> {
 
     thread::spawn(|| Searcher::new(cmd_rx, info_tx).run());
 
-    std::thread::sleep(std::time::Duration::from_millis(2000));
-
     white_bold!("\nSearching positions");
     black_ln!(" ≤ {} ms\n", time_limit);
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+
     let padding = pad();
 
     POSITIONS
@@ -69,6 +69,8 @@ fn search(time_limit: u64) -> Vec<Measurements> {
 
             let position = parse_fen(fen);
 
+            let start = Instant::now();
+
             // send start signal
             cmd_tx
                 .send(SearchCommand::Start {
@@ -77,8 +79,6 @@ fn search(time_limit: u64) -> Vec<Measurements> {
                 })
                 .unwrap();
 
-            // start time
-            let start = Instant::now();
             let mut elapsed = 0;
             let mut nodes = 0;
             let mut depth = 0;
