@@ -14,5 +14,5 @@ test arg="":
 run-raw:
     cargo r -r --bin skakarlak
 
-bench benchname="":
-    cargo bench --bench "{{ benchname }}";
+bench:
+    cargo bench --bench search;
