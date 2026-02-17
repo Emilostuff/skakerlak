@@ -1,37 +1,41 @@
 use shakmaty::{Move, MoveList};
 
+use crate::eval::material::material_score;
+
 /// Sorts a list of moves in order of how promising they are.
 /// Start index allows for exluding a prefix of the list.
 pub fn order(mut moves: MoveList, start_index: usize) -> MoveList {
-    moves[start_index..].sort_by_key(|mv| match mv {
+    moves[start_index..].sort_by_key(|mv| -match mv {
         // Capture AND promote
         Move::Normal {
             capture: Some(_),
             promotion: Some(_),
             ..
-        } => 0,
+        } => 10000,
 
         // Promote
         Move::Normal {
             promotion: Some(_), ..
-        } => 1,
+        } => 9000,
 
         // En passant
-        Move::EnPassant { .. } => 2,
+        Move::EnPassant { .. } => 8000,
 
         // Capture
         Move::Normal {
-            capture: Some(_), ..
-        } => 3,
+            role,
+            capture: Some(captured_role),
+            ..
+        } => 7000 + material_score(*captured_role) - material_score(*role),
 
         // Castling
-        Move::Castle { .. } => 4,
+        Move::Castle { .. } => 6000,
 
         // Regular move
-        Move::Normal { .. } => 5,
+        Move::Normal { .. } => 5000,
 
         // Not applicable in regular chess
-        Move::Put { .. } => 6,
+        Move::Put { .. } => 0,
     });
     moves
 }
